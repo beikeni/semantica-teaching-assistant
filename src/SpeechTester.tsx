@@ -269,7 +269,14 @@ export function SpeechTester() {
       processorRef.current = processor;
 
       const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const wsUrl = `${wsProtocol}//${window.location.host}/api/speech/ws?sampleRate=${SAMPLE_RATE}&language=pt-BR`;
+      // Get base path from current location (e.g., "/sta-demo-3" from "/sta-demo-3/")
+      const basePath =
+        window.location.pathname
+          .replace(/\/$/, "")
+          .split("/")
+          .slice(0, 2)
+          .join("/") || "";
+      const wsUrl = `${wsProtocol}//${window.location.host}${basePath}/api/speech/ws?sampleRate=${SAMPLE_RATE}&language=pt-BR`;
       const ws = new WebSocket(wsUrl);
       ws.binaryType = "arraybuffer";
       wsRef.current = ws;
