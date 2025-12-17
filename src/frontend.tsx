@@ -13,13 +13,15 @@ import { App } from "./App";
 import { TRPCProvider } from "./lib/trpc";
 import type { AppRouter } from "./server/index";
 
+const isProduction = import.meta.env.NODE_ENV === "production";
+
 function Root() {
   const [queryClient] = useState(() => new QueryClient());
   const [trpcClient] = useState(() =>
     createTRPCClient<AppRouter>({
       links: [
         httpBatchStreamLink({
-          url: "/api",
+          url: isProduction ? "/sta-demo-3/api" : "/api",
         }),
       ],
     })
