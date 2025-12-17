@@ -21,6 +21,14 @@ const createS3Client = (): S3Client => {
   const region = process.env.AWS_REGION || "us-west-1";
 
   // Option 1: Static credentials (recommended for PM2/production demos)
+
+  console.log("AWS_ACCESS_KEY_ID", process.env.AWS_ACCESS_KEY_ID);
+  console.log("AWS_SECRET_ACCESS_KEY", process.env.AWS_SECRET_ACCESS_KEY);
+  console.log("AWS_SESSION_TOKEN", process.env.AWS_SESSION_TOKEN);
+  console.log("AWS_SSO_PROFILE", process.env.AWS_SSO_PROFILE);
+  console.log("AWS_REGION", process.env.AWS_REGION);
+  console.log("AWS_BUCKET_NAME", process.env.AWS_BUCKET_NAME);
+
   if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
     console.log("[S3] Using static credentials from environment variables");
     return new S3Client({
