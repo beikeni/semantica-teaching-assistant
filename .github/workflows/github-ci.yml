@@ -23,7 +23,7 @@ jobs:
               run: bun install
 
             - name: Build project
-              run: bun run build
+              run: bun run build:sta-demo-3
 
             - name: Prepare deploy package
               run: |

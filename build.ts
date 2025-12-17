@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import plugin from "bun-plugin-tailwind";
 import { existsSync } from "fs";
-import { rm } from "fs/promises";
+import { rm, copyFile, mkdir } from "fs/promises";
 import path from "path";
 
 if (process.argv.includes("--help") || process.argv.includes("-h")) {
@@ -153,5 +153,48 @@ const outputTable = result.outputs.map((output) => ({
 
 console.table(outputTable);
 const buildTime = (end - start).toFixed(2);
+
+// Copy static assets (SVG files, images, etc.) to dist
+const staticAssets = [
+  ...new Bun.Glob("**/*.{svg,png,jpg,jpeg,gif,ico,webp}").scanSync("src"),
+].filter((file) => !file.includes("node_modules"));
+
+if (staticAssets.length > 0) {
+  console.log(`\n📦 Copying ${staticAssets.length} static asset(s)...`);
+  for (const asset of staticAssets) {
+    const srcPath = path.resolve("src", asset);
+    const destPath = path.resolve(outdir, asset);
+    const destDir = path.dirname(destPath);
+
+    // Ensure destination directory exists
+    if (!existsSync(destDir)) {
+      await mkdir(destDir, { recursive: true });
+    }
+
+    await copyFile(srcPath, destPath);
+    console.log(`  ✓ ${asset}`);
+  }
+}
+
+// Update favicon href in HTML when publicPath is set
+const publicPath = cliConfig.publicPath as string | undefined;
+if (publicPath) {
+  const htmlFiles = [...new Bun.Glob("**/*.html").scanSync(outdir)];
+  for (const htmlFile of htmlFiles) {
+    const htmlPath = path.resolve(outdir, htmlFile);
+    const htmlContent = await Bun.file(htmlPath).text();
+
+    // Replace relative favicon paths with absolute paths using publicPath
+    const updatedContent = htmlContent.replace(
+      /href="\.\/(logo\.svg|favicon\.ico|favicon\.svg|favicon\.png)"/g,
+      (_, filename) => `href="${publicPath}${filename}"`
+    );
+
+    if (updatedContent !== htmlContent) {
+      await Bun.write(htmlPath, updatedContent);
+      console.log(`\n🔗 Updated favicon path in ${htmlFile} to use publicPath`);
+    }
+  }
+}
 
 console.log(`\n✅ Build completed in ${buildTime}ms\n`);
