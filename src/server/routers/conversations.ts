@@ -150,7 +150,6 @@ export const conversationsRouter = trpc.router({
               type: "response.output_text.delta" as const,
               delta: event.delta,
             };
-            console.log("delta", event.delta);
           }
           if (event.type === "response.output_text.done") {
             console.log("response.output_text.done", event.text);

@@ -22,13 +22,6 @@ const createS3Client = (): S3Client => {
 
   // Option 1: Static credentials (recommended for PM2/production demos)
 
-  console.log("AWS_ACCESS_KEY_ID", process.env.AWS_ACCESS_KEY_ID);
-  console.log("AWS_SECRET_ACCESS_KEY", process.env.AWS_SECRET_ACCESS_KEY);
-  console.log("AWS_SESSION_TOKEN", process.env.AWS_SESSION_TOKEN);
-  console.log("AWS_SSO_PROFILE", process.env.AWS_SSO_PROFILE);
-  console.log("AWS_REGION", process.env.AWS_REGION);
-  console.log("AWS_BUCKET_NAME", process.env.AWS_BUCKET_NAME);
-
   if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
     console.log("[S3] Using static credentials from environment variables");
     return new S3Client({
@@ -86,7 +79,6 @@ export class S3Manager {
       Delimiter: "/",
     });
     const response = await client.send(command);
-    console.log("getLevels response", response);
     // CommonPrefixes contains the folder names at this level
     return (
       response.CommonPrefixes?.map((prefix) =>
@@ -102,7 +94,6 @@ export class S3Manager {
       Delimiter: "/",
     });
     const response = await client.send(command);
-    console.log("getLevelStories response", response);
     return (
       response.CommonPrefixes?.map((prefix) =>
         prefix.Prefix?.replace(`${level}/`, "").replace("/", "")
