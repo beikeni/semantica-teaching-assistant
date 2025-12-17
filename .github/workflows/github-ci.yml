@@ -69,5 +69,5 @@ jobs:
                       if pm2 describe "$APP_NAME" > /dev/null 2>&1; then
                         pm2 delete "$APP_NAME"
                       fi
-                      pm2 start "NODE_ENV=production $BUN_PATH run src/index.ts" --name "$APP_NAME"
+                      pm2 start "NODE_ENV=production $BUN_PATH run src/server/index.ts" --name "$APP_NAME"
                       pm2 save
