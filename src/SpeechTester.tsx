@@ -276,7 +276,7 @@ export function SpeechTester() {
           .split("/")
           .slice(0, 2)
           .join("/") || "";
-      const wsUrl = `${wsProtocol}//${window.location.host}${basePath}/api/speech/ws?sampleRate=${SAMPLE_RATE}&language=pt-BR`;
+      const wsUrl = `${wsProtocol}//${window.location.host}${basePath}/api/speech/ws?sampleRate=${SAMPLE_RATE}`; //&language=pt-BR
       const ws = new WebSocket(wsUrl);
       ws.binaryType = "arraybuffer";
       wsRef.current = ws;
