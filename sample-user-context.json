@@ -1,0 +1,120 @@
+{
+  "level": "level-2",
+  "story": "amor-passageiro",
+  "chapter": "ap-chapter-01-dialog",
+  "section": "scripts",
+  "relevant_kb_info": {
+    "grammar": [
+      {
+        "grammar": "possessive pronouns",
+        "examplesFromScript": "\"A minha vida é uma mentira!\"; \"Amigo, seu português é ruim!\"; \"Você precisa estudar o seu português, urgentemente.\"",
+        "contextualExplanations": "\"Minha\" (my) and \"seu/seu\" (your) indicate ownership. These are possessive pronouns."
+      },
+      {
+        "grammar": "funcionar ➜ to function",
+        "examplesFromScript": "\"Acho que isso aqui não vai funcionar.\"",
+        "contextualExplanations": "\"Funcionar\" means to function or to work (in the sense of something operating properly)."
+      },
+      {
+        "grammar": "the preterit tense of ~ir verbs",
+        "examplesFromScript": "\"Não entendi.\"",
+        "contextualExplanations": "\"Entender\" is an -IR verb. \"Entendi\" is the first-person singular conjugation in the preterit tense."
+      },
+      {
+        "grammar": "SER and ESTAR",
+        "examplesFromScript": "\"Esse ano eu descobri que eu sou pisciana.\"; \"Você não é brasileira?\"",
+        "contextualExplanations": "\"Sou\" (I am) and \"é\" (you are) come from SER, used for permanent states (nationality, identity)."
+      },
+      {
+        "grammar": "gostar ➜ to like",
+        "examplesFromScript": "\"Gosto. Gostei!\"",
+        "contextualExplanations": "\"Gosto\" (present) means \"I like\". \"Gostei\" (preterit) means \"I liked\" (completed past action)."
+      }
+    ],
+    "vocab": [
+      {
+        "vocab": "descobrir",
+        "english": "to discover",
+        "alternative": "descobre",
+        "primaryPlusAlternative": "descobrir;descobre",
+        "englishPlusAlternative": "to discover;discover; to find; find"
+      },
+      {
+        "vocab": "mentir",
+        "english": "to lie",
+        "alternative": "mente",
+        "primaryPlusAlternative": "mentir;mente",
+        "englishPlusAlternative": "to lie;lie; to fib; fib",
+        "englishHint": "fib"
+      },
+      {
+        "vocab": "uma mentira",
+        "english": "a lie",
+        "alternative": "a mentira; mentira",
+        "primaryPlusAlternative": "uma mentira;a mentira; mentira",
+        "englishPlusAlternative": "a lie;lie; a fib; fib; a falsehood; falsehood"
+      },
+      {
+        "vocab": "repetir",
+        "english": "to repeat",
+        "alternative": null,
+        "primaryPlusAlternative": "repetir",
+        "englishPlusAlternative": "to repeat;repeat; to do again; do again; to replay; replay; to retry; retry; to happen again; happen again"
+      }
+    ],
+    "scripts": [
+      "CHAPTER 1\nCAROLINA\nEsse ano eu descobri que eu sou pisciana. A minha vida é uma mentira! A minha vida toda…. (é) uma mentira.\nJASON\nVocê não é brasileira?\nCAROLINA\nOi?\nJASON\nPisciana? O que é isso? Eu não entende. Que país?\nJASON\nPisciana? O que é isso? Eu não entende. Que país?\nCAROLINA\nVocê não entende? Ou você não me entende?\nJASON\nDesculpe, Carolina, mas eu não quero…\nCAROLINA\nAmigo, seu português é ruim! Você precisa estudar o seu português, urgentemente. Eu vou ajudar você. Você me entende ou não?\nJASON\nEu não entendo.\nCAROLINA\nOlha, me desculpa. Vamos de novo. Repete com a professora: Eu não entendo.\nJASON\nNão entendo. Não entendi. \nCAROLINA\nMuito bem! Então eu explico. "
+    ],
+    "potential_difficulties": [],
+    "teaching_plan": [
+      {
+        "step": 1,
+        "action": "context_setup",
+        "instruction": "Ask the learner what astrological sign they are to introduce 'pisciana' and gauge comprehension.",
+        "focus": "Activate prior knowledge and highlight the cultural use of zodiac signs in informal introductions.",
+        "grammar_opportunity": "SER ('sou pisciana')",
+        "vocab_opportunity": "pisciana"
+      },
+      {
+        "step": 2,
+        "action": "explore_misunderstanding",
+        "instruction": "Recreate the confusion scene where Jason mistakes 'pisciana' for a nationality. Have learners practice asking and clarifying, using phrases like 'O que é isso?' and 'Que país?'.",
+        "focus": "Practice question formation and clarification strategies",
+        "grammar_opportunity": "question structure ('O que é isso?')",
+        "vocab_opportunity": "descobrir"
+      },
+      {
+        "step": 3,
+        "action": "possessive_pronouns_introduction",
+        "instruction": "Point out examples of 'minha' and 'seu português' in context. Provide short activities matching people to their possessions (e.g., 'minha vida', 'seu português').",
+        "focus": "Ensure learners notice gender agreement with possessive pronouns",
+        "grammar_opportunity": "possessive pronouns",
+        "vocab_opportunity": "uma mentira"
+      },
+      {
+        "step": 4,
+        "action": "verb_conjugation_practice",
+        "instruction": "Contrast 'não entendo', 'não entendi', and 'não entende' using the dialogue. Role-play misunderstandings using each phrase.",
+        "focus": "Clarify the use of present vs. preterit and first vs. third person",
+        "grammar_opportunity": "preterit tense of -ir verbs; present tense of -ir verbs",
+        "vocab_opportunity": null
+      },
+      {
+        "step": 5,
+        "action": "repair_and_repeat",
+        "instruction": "Emulate Carolina's teacher-like correction: prompt the learner to repeat phrases after you, e.g., 'Eu não entendo,' 'Não entendo,' 'Não entendi.' Integrate the verb 'repetir' as both instruction and practice.",
+        "focus": "Enhance listening and pronunciation through repetition",
+        "grammar_opportunity": null,
+        "vocab_opportunity": "repetir"
+      },
+      {
+        "step": 6,
+        "action": "reflection_and_check_in",
+        "instruction": "Conclude by asking what the learner now understands about the terms and grammar, and have them summarize the key learnings about 'pisciana', possessive pronouns, and verb tenses.",
+        "focus": "Encourage metacognitive awareness and reinforce retention through self-explanation",
+        "grammar_opportunity": "SER, possessive pronouns, verb tenses",
+        "vocab_opportunity": "descobrir, mentira, repetir"
+      }
+    ]
+  }
+}

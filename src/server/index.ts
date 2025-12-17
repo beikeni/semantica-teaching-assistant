@@ -1,0 +1,81 @@
+import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
+import type { Server } from "bun";
+import index from "../index.html";
+import { conversationsRouter } from "./routers/conversations";
+import { s3Router } from "./routers/s3";
+import { trpc } from "./trpc";
+import {
+  getSpeechStatus,
+  speechWebSocket,
+  type SpeechSocketData,
+} from "./speech";
+import { notionRouter } from "./routers/notion";
+import { googleSheetsRouter } from "./routers/google-sheets";
+import { testRouter } from "./routers/test";
+
+const appRouter = trpc.router({
+  conversations: conversationsRouter,
+  s3: s3Router,
+  notion: notionRouter,
+  googleSheets: googleSheetsRouter,
+  test: testRouter,
+});
+
+export const createContext = () => {
+  return {};
+};
+
+const server = Bun.serve<SpeechSocketData>({
+  port: 3001,
+  idleTimeout: 120, // 2 minutes (default is 10 seconds)
+  routes: {
+    // Speech WebSocket endpoint - needs special handling for upgrade
+    "/api/speech/ws": (req: Request, server: Server<SpeechSocketData>) => {
+      const url = new URL(req.url);
+      const sampleRate = parseInt(
+        url.searchParams.get("sampleRate") ?? "48000",
+        10
+      );
+      const languageCode = url.searchParams.get("language") ?? "pt-BR";
+
+      const upgraded = server.upgrade(req, {
+        data: {
+          sampleRate,
+          languageCode,
+          pushStream: null,
+          recognizer: null,
+          cleanedUp: false,
+        },
+      });
+
+      if (upgraded) {
+        // Return undefined to indicate WebSocket upgrade
+        return undefined as unknown as Response;
+      }
+
+      return new Response("WebSocket upgrade failed", { status: 400 });
+    },
+    // tRPC API routes
+    "/api/*": (req: Request) =>
+      fetchRequestHandler({
+        endpoint: "/api",
+        req,
+        router: appRouter,
+        createContext,
+      }),
+    // Serve frontend
+    "/*": index,
+  },
+  websocket: speechWebSocket,
+});
+
+console.log("🚀 Server running on http://localhost:3001");
+console.log("🎤 Speech WebSocket: ws://localhost:3001/api/speech/ws");
+console.log(
+  `📊 Speech status: ${
+    getSpeechStatus().configured
+      ? "✅ Azure configured"
+      : "⚠️ Azure not configured"
+  }`
+);
+export type AppRouter = typeof appRouter;

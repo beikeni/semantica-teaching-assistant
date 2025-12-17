@@ -1,0 +1,73 @@
+name: Build and Deploy via FTP
+
+on:
+    push:
+        branches:
+            - main
+    workflow_dispatch:
+
+jobs:
+    build-and-deploy:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout repository
+              uses: actions/checkout@v4
+
+            - name: Setup Bun
+              uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: latest
+
+            - name: Install dependencies
+              run: bun install
+
+            - name: Build project
+              run: bun run build
+
+            - name: Prepare deploy package
+              run: |
+                  mkdir -p deploy
+                  cp -r dist deploy/
+                  cp -r src deploy/
+                  cp package.json bun.lock deploy/
+
+            - name: Ensure target directory exists
+              uses: appleboy/ssh-action@v1.2.0
+              with:
+                  host: ${{ secrets.SSH_HOST_TEST }}
+                  username: ${{ secrets.SSH_USERNAME }}
+                  password: ${{ secrets.SSH_PASSWORD }}
+                  port: 22
+                  script: |
+                      mkdir -p ${{ secrets.SSH_SERVER_DIR_TEST }}
+                      chmod 775 ${{ secrets.SSH_SERVER_DIR_TEST }}
+
+            - name: Deploy to VPS via FTP
+              uses: SamKirkland/FTP-Deploy-Action@v4.3.5
+              with:
+                  server: ${{ secrets.FTP_SERVER }}
+                  username: ${{ secrets.FTP_USERNAME }}
+                  password: ${{ secrets.FTP_PASSWORD }}
+                  port: ${{ secrets.FTP_PORT }}
+                  local-dir: ./deploy/
+                  server-dir: ${{ secrets.FTP_SERVER_DIR_TEST }}
+
+            - name: Install dependencies and restart service via SSH
+              uses: appleboy/ssh-action@v1.2.0
+              with:
+                  host: ${{ secrets.SSH_HOST_TEST }}
+                  username: root
+                  key: ${{ secrets.SSH_PRIVATE_KEY }}
+                  port: 22
+                  script: |
+                      export BUN_PATH="/root/.bun/bin/bun"
+                      export APP_NAME="${{ secrets.PM2_APP_NAME }}"
+                      APP_NAME="${APP_NAME:-sta-demo-3}"
+                      cd ${{ secrets.SSH_SERVER_DIR_TEST }}
+                      $BUN_PATH install
+                      if pm2 describe "$APP_NAME" > /dev/null 2>&1; then
+                        pm2 delete "$APP_NAME"
+                      fi
+                      pm2 start "NODE_ENV=production $BUN_PATH run src/index.ts" --name "$APP_NAME"
+                      pm2 save
