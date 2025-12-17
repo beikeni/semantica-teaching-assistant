@@ -13,17 +13,6 @@ import { notionRouter } from "./routers/notion";
 import { googleSheetsRouter } from "./routers/google-sheets";
 import { testRouter } from "./routers/test";
 
-// Serve favicon as SVG
-const faviconSvg = Bun.file(new URL("../logo.svg", import.meta.url).pathname);
-const serveFavicon = async () => {
-  return new Response(await faviconSvg.arrayBuffer(), {
-    headers: {
-      "Content-Type": "image/svg+xml",
-      "Cache-Control": "public, max-age=31536000",
-    },
-  });
-};
-
 const appRouter = trpc.router({
   conversations: conversationsRouter,
   s3: s3Router,
@@ -66,10 +55,6 @@ const server = Bun.serve<SpeechSocketData>({
 
       return new Response("WebSocket upgrade failed", { status: 400 });
     },
-    // Favicon routes - serve logo.svg for all favicon requests
-    "/favicon.ico": serveFavicon,
-    "/favicon.svg": serveFavicon,
-    "/logo.svg": serveFavicon,
     // tRPC API routes
     "/api/*": (req: Request) =>
       fetchRequestHandler({
