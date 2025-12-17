@@ -21,7 +21,7 @@ function Root() {
     createTRPCClient<AppRouter>({
       links: [
         httpBatchStreamLink({
-          url: isProduction ? "/sta-demo-3/api" : "/api",
+          url: "/api",
         }),
       ],
     })
