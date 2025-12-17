@@ -78,6 +78,7 @@ export class S3Manager {
       Delimiter: "/",
     });
     const response = await client.send(command);
+    console.log("getLevels response", response);
     // CommonPrefixes contains the folder names at this level
     return (
       response.CommonPrefixes?.map((prefix) =>
@@ -93,6 +94,7 @@ export class S3Manager {
       Delimiter: "/",
     });
     const response = await client.send(command);
+    console.log("getLevelStories response", response);
     return (
       response.CommonPrefixes?.map((prefix) =>
         prefix.Prefix?.replace(`${level}/`, "").replace("/", "")
