@@ -13,7 +13,7 @@ import { App } from "./App";
 import { TRPCProvider } from "./lib/trpc";
 import type { AppRouter } from "./server/index";
 
-const isProduction = import.meta.env.NODE_ENV === "production";
+const isProduction = process.env.NODE_ENV === "production";
 
 function Root() {
   const [queryClient] = useState(() => new QueryClient());

@@ -27,8 +27,6 @@ export const conversationsRouter = trpc.router({
   streamResponse: trpc.procedure
     .input(streamResponseInput)
     .mutation(async function* ({ input }) {
-
-      console.log("streamResponse", input);
       // Yield immediately to keep connection alive
       yield { type: "status" as const, status: "loading" };
 
@@ -155,7 +153,7 @@ export const conversationsRouter = trpc.router({
             console.log("delta", event.delta);
           }
           if (event.type === "response.output_text.done") {
-            response = event.text;
+            console.log("response.output_text.done", event.text);
           }
         }
 
