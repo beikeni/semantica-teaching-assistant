@@ -1,6 +1,5 @@
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import type { Server } from "bun";
-import index from "../index.html";
 import { conversationsRouter } from "./routers/conversations";
 import { s3Router } from "./routers/s3";
 import { trpc } from "./trpc";
@@ -12,6 +11,8 @@ import {
 import { notionRouter } from "./routers/notion";
 import { googleSheetsRouter } from "./routers/google-sheets";
 import { testRouter } from "./routers/test";
+
+const isProduction = process.env.NODE_ENV === "production";
 
 const appRouter = trpc.router({
   conversations: conversationsRouter,
@@ -25,51 +26,105 @@ export const createContext = () => {
   return {};
 };
 
+// Production: serve pre-built static files from dist/
+const serveProductionStatic = async (req: Request): Promise<Response> => {
+  const url = new URL(req.url);
+  let pathname = url.pathname;
+
+  // Default to index.html for root
+  if (pathname === "/" || pathname === "") {
+    pathname = "/index.html";
+  }
+
+  const filePath = `./dist${pathname}`;
+  const file = Bun.file(filePath);
+
+  if (await file.exists()) {
+    // Set appropriate content-type headers
+    const ext = pathname.split(".").pop();
+    const contentTypes: Record<string, string> = {
+      html: "text/html",
+      js: "application/javascript",
+      css: "text/css",
+      svg: "image/svg+xml",
+      png: "image/png",
+      jpg: "image/jpeg",
+      jpeg: "image/jpeg",
+      ico: "image/x-icon",
+      json: "application/json",
+    };
+    const contentType = contentTypes[ext ?? ""] ?? "application/octet-stream";
+
+    return new Response(file, {
+      headers: { "Content-Type": contentType },
+    });
+  }
+
+  // SPA fallback: serve index.html for unmatched routes
+  return new Response(Bun.file("./dist/index.html"), {
+    headers: { "Content-Type": "text/html" },
+  });
+};
+
+// Build routes dynamically based on environment
+const routes: Record<string, unknown> = {
+  // Speech WebSocket endpoint - needs special handling for upgrade
+  "/api/speech/ws": (req: Request, server: Server<SpeechSocketData>) => {
+    const url = new URL(req.url);
+    const sampleRate = parseInt(
+      url.searchParams.get("sampleRate") ?? "48000",
+      10
+    );
+    const languageCode = url.searchParams.get("language") ?? "pt-BR";
+
+    const upgraded = server.upgrade(req, {
+      data: {
+        sampleRate,
+        languageCode,
+        pushStream: null,
+        recognizer: null,
+        cleanedUp: false,
+      },
+    });
+
+    if (upgraded) {
+      // Return undefined to indicate WebSocket upgrade
+      return undefined as unknown as Response;
+    }
+
+    return new Response("WebSocket upgrade failed", { status: 400 });
+  },
+  // tRPC API routes
+  "/api/*": (req: Request) =>
+    fetchRequestHandler({
+      endpoint: "/api",
+      req,
+      router: appRouter,
+      createContext,
+    }),
+};
+
+// In production, serve from dist/. In development, use HTML import for on-the-fly bundling
+if (isProduction) {
+  routes["/*"] = serveProductionStatic;
+} else {
+  // Dynamic import for development - enables Bun's on-the-fly bundling
+  const index = (await import("../index.html")).default;
+  routes["/*"] = index;
+}
+
 const server = Bun.serve<SpeechSocketData>({
   port: 3000,
   idleTimeout: 120, // 2 minutes (default is 10 seconds)
-  routes: {
-    // Speech WebSocket endpoint - needs special handling for upgrade
-    "/api/speech/ws": (req: Request, server: Server<SpeechSocketData>) => {
-      const url = new URL(req.url);
-      const sampleRate = parseInt(
-        url.searchParams.get("sampleRate") ?? "48000",
-        10
-      );
-      const languageCode = url.searchParams.get("language") ?? "pt-BR";
-
-      const upgraded = server.upgrade(req, {
-        data: {
-          sampleRate,
-          languageCode,
-          pushStream: null,
-          recognizer: null,
-          cleanedUp: false,
-        },
-      });
-
-      if (upgraded) {
-        // Return undefined to indicate WebSocket upgrade
-        return undefined as unknown as Response;
-      }
-
-      return new Response("WebSocket upgrade failed", { status: 400 });
-    },
-    // tRPC API routes
-    "/api/*": (req: Request) =>
-      fetchRequestHandler({
-        endpoint: "/api",
-        req,
-        router: appRouter,
-        createContext,
-      }),
-    // Serve frontend
-    "/*": index,
-  },
+  routes,
   websocket: speechWebSocket,
 });
 
-console.log("🚀 Server running on http://localhost:3000");
+console.log(
+  `🚀 Server running on http://localhost:3000 (${
+    isProduction ? "production" : "development"
+  })`
+);
 console.log("🎤 Speech WebSocket: ws://localhost:3000/api/speech/ws");
 console.log(
   `📊 Speech status: ${
@@ -78,4 +133,7 @@ console.log(
       : "⚠️ Azure not configured"
   }`
 );
+if (isProduction) {
+  console.log("📁 Serving static files from ./dist/");
+}
 export type AppRouter = typeof appRouter;
