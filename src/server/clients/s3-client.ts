@@ -5,10 +5,51 @@ import {
 } from "@aws-sdk/client-s3";
 import { fromSSO } from "@aws-sdk/credential-provider-sso";
 
-export const client = new S3Client({
-  region: "us-west-1",
-  credentials: fromSSO({ profile: process.env.AWS_SSO_PROFILE }),
-});
+/**
+ * Creates S3 client with flexible credential handling:
+ *
+ * - If AWS_ACCESS_KEY_ID is set: Uses static credentials from environment
+ *   (works with PM2 ecosystem.config.js)
+ *
+ * - If AWS_SSO_PROFILE is set: Uses SSO credentials
+ *   (requires aws sso login on the host machine)
+ *
+ * - Otherwise: Falls back to default AWS credential chain
+ *   (IAM roles, instance profiles, etc.)
+ */
+const createS3Client = (): S3Client => {
+  const region = process.env.AWS_REGION || "us-west-1";
+
+  // Option 1: Static credentials (recommended for PM2/production demos)
+  if (process.env.AWS_ACCESS_KEY_ID && process.env.AWS_SECRET_ACCESS_KEY) {
+    console.log("[S3] Using static credentials from environment variables");
+    return new S3Client({
+      region,
+      credentials: {
+        accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+        sessionToken: process.env.AWS_SESSION_TOKEN, // Optional, for STS temporary creds
+      },
+    });
+  }
+
+  // Option 2: SSO credentials (for local development or when SSO is configured)
+  if (process.env.AWS_SSO_PROFILE) {
+    console.log(
+      `[S3] Using SSO credentials with profile: ${process.env.AWS_SSO_PROFILE}`
+    );
+    return new S3Client({
+      region,
+      credentials: fromSSO({ profile: process.env.AWS_SSO_PROFILE }),
+    });
+  }
+
+  // Option 3: Default credential chain (IAM roles, instance profiles, etc.)
+  console.log("[S3] Using default AWS credential chain");
+  return new S3Client({ region });
+};
+
+export const client = createS3Client();
 
 export class S3Manager {
   public static getChapterText = async ({
