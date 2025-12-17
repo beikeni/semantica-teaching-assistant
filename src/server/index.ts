@@ -26,7 +26,7 @@ export const createContext = () => {
 };
 
 const server = Bun.serve<SpeechSocketData>({
-  port: 3001,
+  port: 3000,
   idleTimeout: 120, // 2 minutes (default is 10 seconds)
   routes: {
     // Speech WebSocket endpoint - needs special handling for upgrade
@@ -69,8 +69,8 @@ const server = Bun.serve<SpeechSocketData>({
   websocket: speechWebSocket,
 });
 
-console.log("🚀 Server running on http://localhost:3001");
-console.log("🎤 Speech WebSocket: ws://localhost:3001/api/speech/ws");
+console.log("🚀 Server running on http://localhost:3000");
+console.log("🎤 Speech WebSocket: ws://localhost:3000/api/speech/ws");
 console.log(
   `📊 Speech status: ${
     getSpeechStatus().configured
