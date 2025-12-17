@@ -14,6 +14,12 @@ import { testRouter } from "./routers/test";
 
 const isProduction = process.env.NODE_ENV === "production";
 
+// Base path for production deployment (e.g., "/sta-demo-3")
+// Set via BASE_PATH env var or defaults to "/sta-demo-3" in production
+const BASE_PATH = isProduction
+  ? (process.env.BASE_PATH ?? "/sta-demo-3")
+  : "";
+
 const appRouter = trpc.router({
   conversations: conversationsRouter,
   s3: s3Router,
@@ -30,6 +36,11 @@ export const createContext = () => {
 const serveProductionStatic = async (req: Request): Promise<Response> => {
   const url = new URL(req.url);
   let pathname = url.pathname;
+
+  // Strip base path prefix if present
+  if (BASE_PATH && pathname.startsWith(BASE_PATH)) {
+    pathname = pathname.slice(BASE_PATH.length) || "/";
+  }
 
   // Default to index.html for root
   if (pathname === "/" || pathname === "") {
@@ -66,48 +77,55 @@ const serveProductionStatic = async (req: Request): Promise<Response> => {
   });
 };
 
-// Build routes dynamically based on environment
-const routes: Record<string, unknown> = {
-  // Speech WebSocket endpoint - needs special handling for upgrade
-  "/api/speech/ws": (req: Request, server: Server<SpeechSocketData>) => {
-    const url = new URL(req.url);
-    const sampleRate = parseInt(
-      url.searchParams.get("sampleRate") ?? "48000",
-      10
-    );
-    const languageCode = url.searchParams.get("language") ?? "pt-BR";
+// Speech WebSocket handler factory
+const createSpeechWsHandler = () => (req: Request, server: Server<SpeechSocketData>) => {
+  const url = new URL(req.url);
+  const sampleRate = parseInt(
+    url.searchParams.get("sampleRate") ?? "48000",
+    10
+  );
+  const languageCode = url.searchParams.get("language") ?? "pt-BR";
 
-    const upgraded = server.upgrade(req, {
-      data: {
-        sampleRate,
-        languageCode,
-        pushStream: null,
-        recognizer: null,
-        cleanedUp: false,
-      },
-    });
+  const upgraded = server.upgrade(req, {
+    data: {
+      sampleRate,
+      languageCode,
+      pushStream: null,
+      recognizer: null,
+      cleanedUp: false,
+    },
+  });
 
-    if (upgraded) {
-      // Return undefined to indicate WebSocket upgrade
-      return undefined as unknown as Response;
-    }
+  if (upgraded) {
+    // Return undefined to indicate WebSocket upgrade
+    return undefined as unknown as Response;
+  }
 
-    return new Response("WebSocket upgrade failed", { status: 400 });
-  },
-  // tRPC API routes
-  "/api/*": (req: Request) =>
-    fetchRequestHandler({
-      endpoint: "/api",
-      req,
-      router: appRouter,
-      createContext,
-    }),
+  return new Response("WebSocket upgrade failed", { status: 400 });
 };
 
-// In production, serve from dist/. In development, use HTML import for on-the-fly bundling
+// tRPC handler factory
+const createTrpcHandler = (endpoint: string) => (req: Request) =>
+  fetchRequestHandler({
+    endpoint,
+    req,
+    router: appRouter,
+    createContext,
+  });
+
+// Build routes dynamically based on environment
+const routes: Record<string, unknown> = {};
+
 if (isProduction) {
-  routes["/*"] = serveProductionStatic;
+  // Production routes with base path
+  routes[`${BASE_PATH}/api/speech/ws`] = createSpeechWsHandler();
+  routes[`${BASE_PATH}/api/*`] = createTrpcHandler(`${BASE_PATH}/api`);
+  routes[`${BASE_PATH}/*`] = serveProductionStatic;
+  routes[`${BASE_PATH}`] = serveProductionStatic;
 } else {
+  // Development routes (no base path)
+  routes["/api/speech/ws"] = createSpeechWsHandler();
+  routes["/api/*"] = createTrpcHandler("/api");
   // Dynamic import for development - enables Bun's on-the-fly bundling
   const index = (await import("../index.html")).default;
   routes["/*"] = index;
@@ -125,7 +143,7 @@ console.log(
     isProduction ? "production" : "development"
   })`
 );
-console.log("🎤 Speech WebSocket: ws://localhost:3000/api/speech/ws");
+console.log(`🎤 Speech WebSocket: ws://localhost:3000${BASE_PATH}/api/speech/ws`);
 console.log(
   `📊 Speech status: ${
     getSpeechStatus().configured
@@ -134,6 +152,6 @@ console.log(
   }`
 );
 if (isProduction) {
-  console.log("📁 Serving static files from ./dist/");
+  console.log(`📁 Serving static files from ./dist/ at base path: ${BASE_PATH}`);
 }
 export type AppRouter = typeof appRouter;
