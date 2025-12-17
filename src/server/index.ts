@@ -16,9 +16,7 @@ const isProduction = process.env.NODE_ENV === "production";
 
 // Base path for production deployment (e.g., "/sta-demo-3")
 // Set via BASE_PATH env var or defaults to "/sta-demo-3" in production
-const BASE_PATH = isProduction
-  ? (process.env.BASE_PATH ?? "/sta-demo-3")
-  : "";
+const BASE_PATH = isProduction ? process.env.BASE_PATH ?? "/sta-demo-3" : "";
 
 const appRouter = trpc.router({
   conversations: conversationsRouter,
@@ -78,31 +76,32 @@ const serveProductionStatic = async (req: Request): Promise<Response> => {
 };
 
 // Speech WebSocket handler factory
-const createSpeechWsHandler = () => (req: Request, server: Server<SpeechSocketData>) => {
-  const url = new URL(req.url);
-  const sampleRate = parseInt(
-    url.searchParams.get("sampleRate") ?? "48000",
-    10
-  );
-  const languageCode = url.searchParams.get("language") ?? "pt-BR";
+const createSpeechWsHandler =
+  () => (req: Request, server: Server<SpeechSocketData>) => {
+    const url = new URL(req.url);
+    const sampleRate = parseInt(
+      url.searchParams.get("sampleRate") ?? "48000",
+      10
+    );
+    const languageCode = url.searchParams.get("language") ?? "pt-BR";
 
-  const upgraded = server.upgrade(req, {
-    data: {
-      sampleRate,
-      languageCode,
-      pushStream: null,
-      recognizer: null,
-      cleanedUp: false,
-    },
-  });
+    const upgraded = server.upgrade(req, {
+      data: {
+        sampleRate,
+        languageCode,
+        pushStream: null,
+        recognizer: null,
+        cleanedUp: false,
+      },
+    });
 
-  if (upgraded) {
-    // Return undefined to indicate WebSocket upgrade
-    return undefined as unknown as Response;
-  }
+    if (upgraded) {
+      // Return undefined to indicate WebSocket upgrade
+      return undefined as unknown as Response;
+    }
 
-  return new Response("WebSocket upgrade failed", { status: 400 });
-};
+    return new Response("WebSocket upgrade failed", { status: 400 });
+  };
 
 // tRPC handler factory
 const createTrpcHandler = (endpoint: string) => (req: Request) =>
@@ -114,19 +113,18 @@ const createTrpcHandler = (endpoint: string) => (req: Request) =>
   });
 
 // Build routes dynamically based on environment
-const routes: Record<string, unknown> = {};
+// Note: In production, the reverse proxy strips the base path before forwarding
+// So the server always receives requests at root paths (/, /api/*, etc.)
+const routes: Record<string, unknown> = {
+  "/api/speech/ws": createSpeechWsHandler(),
+  "/api/*": createTrpcHandler("/api"),
+};
 
 if (isProduction) {
-  // Production routes with base path
-  routes[`${BASE_PATH}/api/speech/ws`] = createSpeechWsHandler();
-  routes[`${BASE_PATH}/api/*`] = createTrpcHandler(`${BASE_PATH}/api`);
-  routes[`${BASE_PATH}/*`] = serveProductionStatic;
-  routes[`${BASE_PATH}`] = serveProductionStatic;
+  // Production: serve pre-built static files
+  routes["/*"] = serveProductionStatic;
 } else {
-  // Development routes (no base path)
-  routes["/api/speech/ws"] = createSpeechWsHandler();
-  routes["/api/*"] = createTrpcHandler("/api");
-  // Dynamic import for development - enables Bun's on-the-fly bundling
+  // Development: use HTML import for on-the-fly bundling
   const index = (await import("../index.html")).default;
   routes["/*"] = index;
 }
@@ -143,7 +141,7 @@ console.log(
     isProduction ? "production" : "development"
   })`
 );
-console.log(`🎤 Speech WebSocket: ws://localhost:3000${BASE_PATH}/api/speech/ws`);
+console.log("🎤 Speech WebSocket: ws://localhost:3000/api/speech/ws");
 console.log(
   `📊 Speech status: ${
     getSpeechStatus().configured
@@ -152,6 +150,7 @@ console.log(
   }`
 );
 if (isProduction) {
-  console.log(`📁 Serving static files from ./dist/ at base path: ${BASE_PATH}`);
+  console.log("📁 Serving static files from ./dist/");
+  console.log(`📍 Expected public base path: ${BASE_PATH}`);
 }
 export type AppRouter = typeof appRouter;
