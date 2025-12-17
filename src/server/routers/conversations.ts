@@ -133,12 +133,12 @@ export const conversationsRouter = trpc.router({
         const stream = await openai.responses.create({
           conversation: conversationId ?? undefined,
           stream: true,
+          input: query || "Please start the lesson",
           prompt: {
             id: TEACHER_CHAT_PROMPT_ID,
             variables: {
               level_3_specific_instructions: instructions,
               user_context: JSON.stringify(userContext),
-              user_message: query ?? "",
             },
           },
         });
