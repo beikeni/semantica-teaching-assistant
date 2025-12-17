@@ -663,7 +663,7 @@ export function SpeechTester() {
               ) : (
                 <FileText className="w-4 h-4 mr-1" />
               )}
-              See Transcript
+              View Chapter Transcript
             </Button>
             <Button
               variant="ghost"
