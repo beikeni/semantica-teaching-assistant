@@ -1,4 +1,4 @@
-import type { LessonPlan } from "../models/LessonPlan";
+import type { LessonPlanType } from "../models/LessonPlan";
 import type { RangeValues, SheetRange, SpreadsheetInfo } from "./google-sheets";
 
 export interface IGoogleSheetsClient {
@@ -24,19 +24,19 @@ export interface INotionClient {
     story: string;
     chapter: string;
     section: string;
-  }) => Promise<{ pageContent: string } | null>;
-  createLessonPlan: ({
+  }) => Promise<string | null>;
+  storeLessonPlan: ({
     level,
     story,
     chapter,
     section,
-    lessonPlan,
+    markdownLessonPlan,
   }: {
     level: string;
     story: string;
     chapter: string;
     section: string;
-    lessonPlan: LessonPlan;
+    markdownLessonPlan: string;
   }) => Promise<void>;
   getPage: ({ id }: { id: string }) => Promise<any>;
 }
@@ -47,8 +47,32 @@ export interface IMakeClient {
 }
 export interface IS3Manager {
   getLevels: () => Promise<string[]>;
-  getLevelStories: ({level}: {level: string}) => Promise<string[]>;
-  getStorySections: ({level, story}: {level: string, story: string}) => Promise<string[]>;
-  getSectionChapters: ({level, story, section}: {level: string, story: string, section: string}) => Promise<string[]>;
-  getChapterText: ({level, story, section, chapter}: {level: string, story: string, section: string, chapter: string}) => Promise<string>;
+  getLevelStories: ({ level }: { level: string }) => Promise<string[]>;
+  getStorySections: ({
+    level,
+    story,
+  }: {
+    level: string;
+    story: string;
+  }) => Promise<string[]>;
+  getSectionChapters: ({
+    level,
+    story,
+    section,
+  }: {
+    level: string;
+    story: string;
+    section: string;
+  }) => Promise<string[]>;
+  getChapterText: ({
+    level,
+    story,
+    section,
+    chapter,
+  }: {
+    level: string;
+    story: string;
+    section: string;
+    chapter: string;
+  }) => Promise<string>;
 }

@@ -9,6 +9,7 @@ import { zodTextFormat } from "openai/helpers/zod";
 // import { LessonPlanSchema } from "../models/lessonPlan";
 import { LessonPlan } from "../application/LessonPlan";
 import type { INotionClient } from "./interfaces";
+import type { LessonPlanType } from "../models/LessonPlan";
 
 const NOTION_TEXT_LIMIT = 2000;
 
@@ -83,7 +84,7 @@ export class NotionClient implements INotionClient {
     story: string;
     chapter: string;
     section: string;
-  }): Promise<{ pageContent: string } | null> {
+  }): Promise<string | null> {
     const datasource = await this.client.dataSources.query({
       data_source_id: this.dataSourceId,
       filter: {
@@ -112,21 +113,21 @@ export class NotionClient implements INotionClient {
       .map((block) => block.paragraph?.rich_text[0]?.plain_text)
       .join("\n");
 
-    return { pageContent };
+    return pageContent;
   }
 
-  public async createLessonPlan({
+  public async storeLessonPlan({
     level,
     story,
     chapter,
     section,
-    lessonPlan,
+    markdownLessonPlan,
   }: {
     level: string;
     story: string;
     chapter: string;
     section: string;
-    lessonPlan: LessonPlan;
+    markdownLessonPlan: string;
   }): Promise<void> {
     const datasource = await this.client.dataSources.query({
       data_source_id: this.dataSourceId,
@@ -142,12 +143,8 @@ export class NotionClient implements INotionClient {
       return;
     }
 
-    const readableLessonPlan = await LessonPlan.convertToReadableFormat({
-      lessonPlan,
-    });
-
     // Split content into chunks that fit Notion's 2000 char limit
-    const textChunks = splitTextIntoChunks(readableLessonPlan);
+    const textChunks = splitTextIntoChunks(markdownLessonPlan);
     const paragraphBlocks = textChunks.map((chunk) => ({
       type: "paragraph" as const,
       paragraph: {

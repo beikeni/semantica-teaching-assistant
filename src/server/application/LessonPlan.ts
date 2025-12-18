@@ -1,6 +1,6 @@
 import { zodTextFormat } from "openai/helpers/zod.mjs";
 import {
-  CONVERT_LESSON_PLAN_TO_READABLE_FORMAT_PROMPT_ID,
+  CONVERT_TO_MARKDOWN_PROMPT_ID,
   GRAMMAR_SHEET_RANGE,
   LESSON_PLANNER_PROMPT_ID,
   VOCAB_GRAMMAR_SHEET_ID,
@@ -15,6 +15,7 @@ import {
   type CleanedGrammar,
   type CleanedVocab,
   type Grammar,
+  type LessonPlanType,
   type Vocab,
 } from "../models/LessonPlan";
 import { z } from "zod";
@@ -29,7 +30,7 @@ export class LessonPlan {
     scripts: string[];
     grammar: CleanedGrammar[];
     vocab: CleanedVocab[];
-  }) {
+  }): Promise<LessonPlanType> {
     console.log("generateLessonPLan");
     const response = await openai.responses.parse({
       text: {
@@ -45,20 +46,17 @@ export class LessonPlan {
       },
     });
 
-    console.log("response.output_parsed", response.output_parsed);
-    return response.output_parsed;
+    return response.output_parsed as LessonPlanType;
   }
 
-  public static async convertToReadableFormat({
+  public static async convertToMarkdown({
     lessonPlan,
   }: {
-    lessonPlan: LessonPlan;
-  }) {
-    console.log("convertToReadableFormat");
-    console.log(JSON.stringify(lessonPlan, null, 2));
+    lessonPlan: LessonPlanType;
+  }): Promise<string> {
     const response = await openai.responses.create({
       prompt: {
-        id: CONVERT_LESSON_PLAN_TO_READABLE_FORMAT_PROMPT_ID,
+        id: CONVERT_TO_MARKDOWN_PROMPT_ID,
         variables: {
           lesson_plan_object: JSON.stringify(lessonPlan),
         },

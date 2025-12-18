@@ -2,17 +2,24 @@ import { z } from "zod";
 import { trpc } from "../trpc";
 
 import { openai } from "../clients/openai-client";
-import { TEACHER_CHAT_PROMPT_ID } from "../lib/constants";
+import {
+  CEFR_LESSON_CLASSIFICATION_SHEET_ID,
+  CEFR_LESSON_CLASSIFIER_PROMPT_ID,
+  CEFR_SHEET_RANGE,
+  TEACHER_CHAT_PROMPT_ID,
+} from "../lib/constants";
 import fs from "fs/promises";
-import { S3Manager } from "../clients/s3-client";
 import { LessonPlan } from "../application/LessonPlan";
 import {
-  LessonPlanSchema,
+  type CleanedGrammar,
+  type CleanedVocab,
   type Grammar,
+  type LessonPlanType,
   type Vocab,
 } from "../models/LessonPlan";
-import { MakeClient } from "../clients/make-client";
 import { notionClient } from "../clients/notion-client";
+import { CefrClassificationSchema, type UserContext } from "../models/app";
+import { zodTextFormat } from "openai/helpers/zod.mjs";
 
 const streamResponseInput = z.object({
   level: z.string(),
@@ -21,17 +28,17 @@ const streamResponseInput = z.object({
   section: z.string(),
   query: z.string().nullish(),
   conversationId: z.string().nullish(),
+  userId: z.string(),
 });
 
 export const conversationsRouter = trpc.router({
   streamResponse: trpc.procedure
     .input(streamResponseInput)
     .mutation(async function* ({ input, ctx }) {
-      // Yield immediately to keep connection alive
       yield { type: "status" as const, status: "loading" };
 
       try {
-        const { level, story, chapter, section, query } = input;
+        const { level, story, chapter, section, query, userId } = input;
         const instructions = await fs.readFile(
           `src/server/agents/chat-agent/${level}-instructions.md`,
           "utf8"
@@ -83,35 +90,76 @@ export const conversationsRouter = trpc.router({
 
         yield { type: "status" as const, status: "preparing_lesson" };
 
-        let lessonPlan = await ctx.makeClient.getRecord({
-          key: `lesson-plan:${level}:${story}:${section}:${chapter}`,
+        let lessonPlan = await ctx.notionClient.getLessonPlan({
+          level,
+          story,
+          chapter,
+          section,
         });
-
         if (!lessonPlan) {
           yield { type: "status" as const, status: "generating_lesson_plan" };
-          lessonPlan = await LessonPlan.generateLessonPLan({
-            scripts: [script ?? ""],
-            grammar: cleanedGrammar,
-            vocab: cleanedVocab,
+          const newLessonPlan: LessonPlanType | null =
+            await LessonPlan.generateLessonPLan({
+              scripts: [script ?? ""],
+              grammar: cleanedGrammar,
+              vocab: cleanedVocab,
+            });
+
+          const markdownLessonPlan = await LessonPlan.convertToMarkdown({
+            lessonPlan: newLessonPlan,
           });
-          await ctx.makeClient.setRecord({
-            key: `lesson-plan:${level}:${story}:${section}:${chapter}`,
-            value: JSON.stringify(lessonPlan),
-          });
-          await notionClient.createLessonPlan({
+          await notionClient.storeLessonPlan({
             level,
             story,
             chapter,
             section,
-            lessonPlan,
+            markdownLessonPlan,
           });
+          lessonPlan = markdownLessonPlan;
         }
-
-        const verifiedLessonPlan = LessonPlanSchema.parse(lessonPlan);
 
         // TODO: At the moment, the grammar points and vocab come from both google sheets and the lesson plan.
 
-        const userContext = {
+        // let cefrLessonClassification = await ctx.makeClient.getRecord({
+        //   key: `cefrLessonClassification:${level}/${story}/${section}/${chapter}`,
+        // });
+        // console.log("cefrLessonClassification", cefrLessonClassification);
+        // if (!cefrLessonClassification) {
+        //   console.log("no cefrLessonClassification, generating...");
+        //   const cefrResponse = await openai.responses.parse({
+        //     text: {
+        //       format: zodTextFormat(
+        //         CefrClassificationSchema,
+        //         "cefr_classification"
+        //       ),
+        //     },
+        //     prompt: {
+        //       id: CEFR_LESSON_CLASSIFIER_PROMPT_ID,
+        //     },
+        //     input: JSON.stringify({
+        //       script: script,
+        //       lessonPlan: lessonPlan,
+        //       grammar: cleanedGrammar,
+        //       vocab: cleanedVocab,
+        //     }),
+        //   });
+
+        //   console.log("cefrResponse", cefrResponse.output_parsed);
+
+        //   await ctx.makeClient.setRecord({
+        //     key: `cefrLessonClassification:${level}/${story}/${section}/${chapter}`,
+        //     value: JSON.stringify(cefrResponse.output_parsed),
+        //   });
+        //   cefrLessonClassification = cefrResponse.output_parsed;
+        // }
+
+        yield { type: "status" as const, status: "streaming_response" };
+
+        const worker = new Worker(
+          new URL("../workers/evaluation-worker.ts", import.meta.url).href
+        );
+
+        const userContext: UserContext = {
           level,
           story,
           chapter,
@@ -120,15 +168,16 @@ export const conversationsRouter = trpc.router({
             grammar: cleanedGrammar,
             vocab: cleanedVocab,
             scripts: [script],
-            story_summary: verifiedLessonPlan.story_summary,
-            grammar_points: verifiedLessonPlan.grammar_points,
-            vocab_to_review: verifiedLessonPlan.vocab_to_review,
-            potential_difficulties: verifiedLessonPlan.potential_difficulties,
-            teaching_plan: verifiedLessonPlan.teaching_plan,
+            lesson_plan: lessonPlan,
           },
         };
-
-        yield { type: "status" as const, status: "streaming_response" };
+        worker.postMessage({
+          query,
+          cefrLessonClassification,
+          userContext,
+          userId,
+          conversationId,
+        });
 
         const stream = await openai.responses.create({
           conversation: conversationId ?? undefined,
@@ -137,7 +186,7 @@ export const conversationsRouter = trpc.router({
           prompt: {
             id: TEACHER_CHAT_PROMPT_ID,
             variables: {
-              level_3_specific_instructions: instructions,
+              level_specific_instructions: instructions,
               user_context: JSON.stringify(userContext),
             },
           },
@@ -159,8 +208,7 @@ export const conversationsRouter = trpc.router({
         yield { type: "status" as const, status: "done" };
 
         // call to responses api to grade the output
-        // aosdasdjaoijsd 
-        
+        // aosdasdjaoijsd
       } catch (error) {
         console.error("Stream error:", error);
         console.error("Error details:", JSON.stringify(error, null, 2));

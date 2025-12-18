@@ -73,4 +73,4 @@ export const LessonPlanSchema = z.object({
 
 export type PotentialDifficulty = z.infer<typeof PotentialDifficultySchema>;
 export type TeachingStep = z.infer<typeof TeachingStepSchema>;
-export type LessonPlan = z.infer<typeof LessonPlanSchema>;
+export type LessonPlanType = z.infer<typeof LessonPlanSchema>;

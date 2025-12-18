@@ -1,58 +1,21 @@
 import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
 import type { Server } from "bun";
-import { conversationsRouter } from "./routers/conversations";
-import { s3Router } from "./routers/s3";
-import { trpc } from "./trpc";
 import {
   getSpeechStatus,
   speechWebSocket,
   type SpeechSocketData,
 } from "./speech";
-import { notionRouter } from "./routers/notion";
-import { googleSheetsRouter } from "./routers/google-sheets";
-import { testRouter } from "./routers/test";
-import type {
-  IGoogleSheetsClient,
-  IS3Manager,
-  INotionClient,
-  IMakeClient,
-} from "./clients/interfaces";
-import { googleSheetsClient } from "./clients/google-sheets";
-import { notionClient } from "./clients/notion-client";
-import { makeClient } from "./clients/make-client";
-import { s3Manager } from "./clients/s3-client";
+import { appRouter, createContext } from "./router";
+
+// Re-export types and router utilities for external use
+export type { AppRouter, AppContext, Context } from "./router";
+export { createCaller, createContext } from "./router";
 
 const isProduction = process.env.NODE_ENV === "production";
 
 // Base path for production deployment (e.g., "/sta-demo-3")
 // Set via BASE_PATH env var or defaults to "/sta-demo-3" in production
 const BASE_PATH = isProduction ? process.env.BASE_PATH ?? "/sta-demo-3" : "";
-
-const appRouter = trpc.router({
-  conversations: conversationsRouter,
-  s3: s3Router,
-  notion: notionRouter,
-  googleSheets: googleSheetsRouter,
-  test: testRouter,
-});
-
-export type AppContext = {
-  googleSheetsClient: IGoogleSheetsClient;
-  notionClient: INotionClient;
-  s3Manager: IS3Manager;
-  makeClient: IMakeClient;
-};
-
-export const createContext = (): AppContext => {
-  return {
-    googleSheetsClient: googleSheetsClient,
-    notionClient: notionClient,
-    s3Manager: s3Manager,
-    makeClient: makeClient,
-  };
-};
-
-export type Context = AppContext;
 
 // Production: serve pre-built static files from dist/
 const serveProductionStatic = async (req: Request): Promise<Response> => {
@@ -177,4 +140,3 @@ if (isProduction) {
   console.log("📁 Serving static files from ./dist/");
   console.log(`📍 Expected public base path: ${BASE_PATH}`);
 }
-export type AppRouter = typeof appRouter;

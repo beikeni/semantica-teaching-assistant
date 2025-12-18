@@ -359,6 +359,7 @@ export function SpeechTester() {
         section: store.section,
         query,
         conversationId: store.conversationId || undefined,
+        userId: store.learnerId,
       });
 
       // Handle streaming response from generator mutation
