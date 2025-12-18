@@ -173,7 +173,7 @@ export const conversationsRouter = trpc.router({
         };
         worker.postMessage({
           query,
-          cefrLessonClassification,
+        //   cefrLessonClassification,
           userContext,
           userId,
           conversationId,
