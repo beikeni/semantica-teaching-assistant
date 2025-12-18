@@ -17,11 +17,20 @@ describe("conversations.streamResponse", () => {
   test("streams responses and yields expected event types", async () => {
     const events: Array<{ type: string; [key: string]: unknown }> = [];
 
-    // Call the streaming mutation
+    // // Call the streaming mutation
+    // const stream = await caller.conversations.streamResponse({
+    //   level: "level-1",
+    //   story: "eduardo-e-monica-1",
+    //   chapter: "eem1-chapter-01-dialog",
+    //   section: "Scripts",
+    //   query: "Hello, please start the lesson.",
+    //   conversationId: "conv_6943d50d01988196b835c6f2fb4e62790b5b7e3ca93b9962",
+    //   userId: "user_123",
+    // });
     const stream = await caller.conversations.streamResponse({
-      level: "level-1",
-      story: "eduardo-e-monica-1",
-      chapter: "eem1-chapter-01-dialog",
+      level: "level-3",
+      story: "a-virada",
+      chapter: "av-chapter-97-dialog",
       section: "Scripts",
       query: "Hello, please start the lesson.",
       conversationId: "conv_6943d50d01988196b835c6f2fb4e62790b5b7e3ca93b9962",
@@ -72,5 +81,45 @@ describe("conversations.streamResponse", () => {
       // Should have received at least some text deltas
       expect(deltaEvents.length).toBeGreaterThan(0);
     }
-  }, 60000); // 60 second timeout for API calls
+  }, 120000); // 60 second timeout for API calls
 });
+
+// "evaluation": {
+//   "chapter_comprehension": "",
+//   "CEFR_progress_check": {
+//     "status": "",
+//     "ingested": {
+//       "CEFR_Level": "",
+//       "Requirements": [],
+//       "Goals": []
+//     },
+//     "requirements_met": [
+//       {
+//         "requirement": "",
+//         "met": false,
+//         "evidence": ""
+//       }
+//     ],
+//     "goals_in_progress": [
+//       {
+//         "goal": "",
+//         "status": "not_started|in_progress|achieved|regressed",
+//         "score_0_100": 0,
+//         "evidence": "",
+//         "last_updated_step": 1
+//       }
+//     ],
+//     "goals_completed": [
+//       {
+//         "goal": "",
+//         "achieved_on_step": 1,
+//         "evidence": ""
+//       }
+//     ],
+//     "overall_alignment": {
+//       "relative_to_cefr": "below|at|above",
+//       "confidence_0_1": 0
+//     },
+//     "alerts": []
+//   }
+// },

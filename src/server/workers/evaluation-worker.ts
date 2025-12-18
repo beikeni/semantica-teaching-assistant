@@ -24,13 +24,11 @@ const createWorkerFunction = ({ ctx }: { ctx: AppContext }) => {
   return async (event: MessageEvent) => {
     const {
       conversationId,
-      //   cefrLessonClassification,
       userId,
       userContext,
       query,
     }: {
       conversationId: string;
-      //   cefrLessonClassification: CefrClassification;
       userId: string;
       userContext: UserContext;
       query: string;

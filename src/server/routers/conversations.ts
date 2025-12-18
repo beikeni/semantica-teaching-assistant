@@ -6,6 +6,7 @@ import {
   CEFR_LESSON_CLASSIFICATION_SHEET_ID,
   CEFR_LESSON_CLASSIFIER_PROMPT_ID,
   CEFR_SHEET_RANGE,
+  LEARNER_EVALUATION_PROMPT_ID,
   TEACHER_CHAT_PROMPT_ID,
 } from "../lib/constants";
 import fs from "fs/promises";
@@ -20,6 +21,7 @@ import {
 import { notionClient } from "../clients/notion-client";
 import { CefrClassificationSchema, type UserContext } from "../models/app";
 import { zodTextFormat } from "openai/helpers/zod.mjs";
+import { UserEvaluationSchema } from "../models/user-evaluation";
 
 const streamResponseInput = z.object({
   level: z.string(),
@@ -120,38 +122,77 @@ export const conversationsRouter = trpc.router({
 
         // TODO: At the moment, the grammar points and vocab come from both google sheets and the lesson plan.
 
-        // let cefrLessonClassification = await ctx.makeClient.getRecord({
-        //   key: `cefrLessonClassification:${level}/${story}/${section}/${chapter}`,
-        // });
-        // console.log("cefrLessonClassification", cefrLessonClassification);
-        // if (!cefrLessonClassification) {
-        //   console.log("no cefrLessonClassification, generating...");
-        //   const cefrResponse = await openai.responses.parse({
-        //     text: {
-        //       format: zodTextFormat(
-        //         CefrClassificationSchema,
-        //         "cefr_classification"
-        //       ),
-        //     },
-        //     prompt: {
-        //       id: CEFR_LESSON_CLASSIFIER_PROMPT_ID,
-        //     },
-        //     input: JSON.stringify({
-        //       script: script,
-        //       lessonPlan: lessonPlan,
-        //       grammar: cleanedGrammar,
-        //       vocab: cleanedVocab,
-        //     }),
-        //   });
+        const cefrLessonClassificationPromise = (async () => {
+          let cefrLessonClassification = await ctx.makeClient.getRecord({
+            key: `cefrLessonClassification:${level}/${story}/${section}/${chapter}`,
+          });
+          if (!cefrLessonClassification) {
+            console.log("no cefrLessonClassification, generating...");
+            const cefrResponse = await openai.responses.parse({
+              model: "gpt-5-mini",
+              max_output_tokens: 4096,
+              text: {
+                format: zodTextFormat(
+                  CefrClassificationSchema,
+                  "cefr_classification"
+                ),
+              },
+              prompt: {
+                id: CEFR_LESSON_CLASSIFIER_PROMPT_ID,
+              },
+              input: JSON.stringify({
+                script: script,
+                lessonPlan: lessonPlan,
+                grammar: cleanedGrammar,
+                vocab: cleanedVocab,
+              }),
+            });
 
-        //   console.log("cefrResponse", cefrResponse.output_parsed);
+            console.log("cefrResponse", cefrResponse.output_parsed);
 
-        //   await ctx.makeClient.setRecord({
-        //     key: `cefrLessonClassification:${level}/${story}/${section}/${chapter}`,
-        //     value: JSON.stringify(cefrResponse.output_parsed),
-        //   });
-        //   cefrLessonClassification = cefrResponse.output_parsed;
-        // }
+            await ctx.makeClient.setRecord({
+              key: `cefrLessonClassification:${level}/${story}/${section}/${chapter}`,
+              value: JSON.stringify(cefrResponse.output_parsed),
+            });
+            cefrLessonClassification = cefrResponse.output_parsed;
+          }
+          const conversationItems = await openai.conversations.items.list(
+            conversationId
+          );
+
+          console.log("conversationItems", JSON.stringify(conversationItems));
+
+          const userEvaluationResponse = await openai.responses.parse({
+            text: {
+              format: zodTextFormat(UserEvaluationSchema, "user_evaluation"),
+            },
+            model: "gpt-5-mini",
+            max_output_tokens: 8192,
+            input: JSON.stringify(conversationItems),
+            prompt: {
+              id: LEARNER_EVALUATION_PROMPT_ID,
+              variables: {
+                evaluation_context: JSON.stringify({
+                  cefr_classification: cefrLessonClassification,
+                  lesson_plan: lessonPlan,
+                  script: script,
+                  grammar: cleanedGrammar,
+                  vocab: cleanedVocab,
+                }),
+              },
+            },
+          });
+          console.log(
+            "userEvaluationResponse",
+            JSON.stringify(userEvaluationResponse.output_parsed)
+          );
+          await ctx.makeClient.setRecord({
+            key: `userEvaluation:${userId}/${conversationId}`,
+            value: JSON.stringify(userEvaluationResponse.output_parsed),
+          });
+
+          return cefrLessonClassification;
+        })();
 
         yield { type: "status" as const, status: "streaming_response" };
 
@@ -206,8 +247,7 @@ export const conversationsRouter = trpc.router({
 
         yield { type: "status" as const, status: "done" };
 
-        // call to responses api to grade the output
-        // aosdasdjaoijsd
+        const cefrLessonClassification = await cefrLessonClassificationPromise;
       } catch (error) {
         console.error("Stream error:", error);
         console.error("Error details:", JSON.stringify(error, null, 2));
