@@ -17,6 +17,12 @@ import {
   Square,
   FileText,
   X,
+  ClipboardCheck,
+  CheckCircle2,
+  XCircle,
+  AlertTriangle,
+  Target,
+  TrendingUp,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { marked } from "marked";
@@ -30,7 +36,8 @@ type StreamStatus =
   | "preparing_lesson"
   | "generating_lesson_plan"
   | "streaming_response"
-  | "done";
+  | "done"
+  | "evaluation_complete";
 
 // Configure marked for safe rendering
 marked.setOptions({
@@ -92,6 +99,9 @@ export function SpeechTester() {
   const handsOffTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTranscriptRef = useRef("");
   const [showTranscriptModal, setShowTranscriptModal] = useState(false);
+  const [showEvaluationModal, setShowEvaluationModal] = useState(false);
+  const [evaluationUpdated, setEvaluationUpdated] = useState(false);
+  const [isWaitingForResponse, setIsWaitingForResponse] = useState(false);
 
   // tRPC queries for dynamic data using TanStack Query native pattern
   const levelsQuery = useQuery(trpc.s3.getLevels.queryOptions());
@@ -128,6 +138,18 @@ export function SpeechTester() {
             chapter: store.chapter,
           }
         : skipToken
+    )
+  );
+
+  const evaluationQuery = useQuery(
+    trpc.evaluations.getEvaluation.queryOptions(
+      {
+        userId: store.learnerId,
+        conversationId: store.conversationId,
+      },
+      {
+        enabled: !!store.learnerId && !!store.conversationId,
+      }
     )
   );
 
@@ -338,6 +360,7 @@ export function SpeechTester() {
 
     store.setIsSubmitting(true);
     setStreamStatus("loading");
+    setIsWaitingForResponse(true);
 
     const query = transcript.trim();
     if (query) {
@@ -365,7 +388,44 @@ export function SpeechTester() {
       // Handle streaming response from generator mutation
       for await (const chunk of result) {
         if (chunk.type === "status") {
-          setStreamStatus(chunk.status as StreamStatus);
+          const status = chunk.status as StreamStatus;
+          setStreamStatus(status);
+
+          // When "done" is received, finalize the message and allow recording again
+          if (status === "done") {
+            // IMPORTANT: Capture and save the message NOW, before enabling the button
+            // This prevents a race condition where a new request could clear streamingTextRef
+            const finalText = streamingTextRef.current;
+            streamingTextRef.current = "";
+            setStreamingText("");
+
+            if (finalText) {
+              store.addMessage(finalText, true);
+              // Save the conversation with all messages after streaming completes
+              const conversationId =
+                useConversationStore.getState().conversationId;
+              if (conversationId) {
+                store.saveConversation(conversationId);
+              }
+            }
+
+            // Now it's safe to enable the button
+            setIsWaitingForResponse(false);
+            store.setIsSubmitting(false);
+
+            // In hands-off mode, automatically restart recording after response completes
+            if (shouldRestartRecording && handsOffMode) {
+              setTimeout(() => {
+                startRecording();
+              }, 300);
+            }
+          }
+
+          // When evaluation completes, mark it as updated and refetch
+          if (status === "evaluation_complete") {
+            setEvaluationUpdated(true);
+            evaluationQuery.refetch();
+          }
         } else if (chunk.type === "conversation_id") {
           // Update conversation ID in real-time (don't save yet - wait until stream completes)
           store.setConversationId(chunk.conversationId);
@@ -374,36 +434,18 @@ export function SpeechTester() {
           setStreamingText(streamingTextRef.current);
         }
       }
-
-      // After stream completes: clear streaming display first, then add message
-      const finalText = streamingTextRef.current;
-      streamingTextRef.current = "";
-      setStreamingText("");
-
-      if (finalText) {
-        store.addMessage(finalText, true);
-        // Save the conversation with all messages after streaming completes
-        const conversationId = useConversationStore.getState().conversationId;
-        if (conversationId) {
-          store.saveConversation(conversationId);
-        }
-      }
     } catch (err) {
       store.addMessage(
         `Error: ${err instanceof Error ? err.message : "Unknown error"}`,
         true
       );
+      // On error, allow recording again
+      setIsWaitingForResponse(false);
+      store.setIsSubmitting(false);
     } finally {
+      // Ensure submitting state is cleared (may already be false from "done" status)
       store.setIsSubmitting(false);
       setStreamStatus("idle");
-
-      // In hands-off mode, automatically restart recording after response completes
-      if (shouldRestartRecording && handsOffMode) {
-        // Small delay to let cleanup finish, then restart
-        setTimeout(() => {
-          startRecording();
-        }, 300);
-      }
     }
   };
 
@@ -420,6 +462,8 @@ export function SpeechTester() {
     setStreamingText("");
     streamingTextRef.current = "";
     setStreamStatus("idle");
+    setEvaluationUpdated(false);
+    setIsWaitingForResponse(false);
 
     // Clear all localStorage
     localStorage.clear();
@@ -655,6 +699,31 @@ export function SpeechTester() {
             <Button
               variant="ghost"
               size="sm"
+              onClick={() => {
+                setShowEvaluationModal(true);
+                setEvaluationUpdated(false);
+              }}
+              disabled={!store.conversationId || !store.learnerId}
+              className="text-muted-foreground hover:text-primary relative"
+            >
+              {evaluationQuery.isFetching ? (
+                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+              ) : (
+                <ClipboardCheck className="w-4 h-4 mr-1" />
+              )}
+              View Evaluation
+              {evaluationUpdated && (
+                <span className="absolute -top-1 -right-1 flex h-4 w-4">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-4 w-4 bg-green-500 items-center justify-center text-[10px] text-white font-bold">
+                    !
+                  </span>
+                </span>
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => setShowTranscriptModal(true)}
               disabled={!store.chapter || chapterTextQuery.isLoading}
               className="text-muted-foreground hover:text-primary"
@@ -818,10 +887,19 @@ export function SpeechTester() {
               className="w-full"
               size="lg"
               onClick={handleSubmit}
-              disabled={store.isSubmitting}
+              disabled={store.isSubmitting || isWaitingForResponse}
             >
-              <Send className="w-4 h-4 mr-2" />
-              Send
+              {isWaitingForResponse ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Waiting for response...
+                </>
+              ) : (
+                <>
+                  <Send className="w-4 h-4 mr-2" />
+                  Send
+                </>
+              )}
             </Button>
           ) : status === "recording" ? (
             <Button
@@ -839,16 +917,25 @@ export function SpeechTester() {
                 className="flex-1"
                 size="lg"
                 onClick={handleSubmit}
-                disabled={store.isSubmitting}
+                disabled={store.isSubmitting || isWaitingForResponse}
               >
-                <Send className="w-4 h-4 mr-2" />
-                Send Message
+                {isWaitingForResponse ? (
+                  <>
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                    Waiting for response...
+                  </>
+                ) : (
+                  <>
+                    <Send className="w-4 h-4 mr-2" />
+                    Send Message
+                  </>
+                )}
               </Button>
               <Button
                 size="lg"
                 variant="outline"
                 onClick={startRecording}
-                disabled={store.isSubmitting}
+                disabled={store.isSubmitting || isWaitingForResponse}
               >
                 <Mic className="w-4 h-4" />
               </Button>
@@ -860,14 +947,24 @@ export function SpeechTester() {
               onClick={startRecording}
               disabled={
                 store.isSubmitting ||
+                isWaitingForResponse ||
                 !store.level ||
                 !store.story ||
                 !store.section ||
                 !store.chapter
               }
             >
-              <Mic className="w-4 h-4 mr-2" />
-              Record Message
+              {isWaitingForResponse ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  Waiting for response...
+                </>
+              ) : (
+                <>
+                  <Mic className="w-4 h-4 mr-2" />
+                  Record Message
+                </>
+              )}
             </Button>
           )}
         </footer>
@@ -908,6 +1005,287 @@ export function SpeechTester() {
               <Button
                 variant="outline"
                 onClick={() => setShowTranscriptModal(false)}
+              >
+                Close
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Evaluation Modal */}
+      {showEvaluationModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-background rounded-lg shadow-xl max-w-3xl w-full mx-4 max-h-[85vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b">
+              <div className="flex items-center gap-2">
+                <ClipboardCheck className="w-5 h-5 text-primary" />
+                <h3 className="font-semibold text-lg">Learner Evaluation</h3>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowEvaluationModal(false)}
+              >
+                <X className="w-4 h-4" />
+              </Button>
+            </div>
+            <div className="p-4 overflow-y-auto flex-1 space-y-6">
+              {evaluationQuery.isLoading ? (
+                <div className="flex items-center justify-center py-8">
+                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                </div>
+              ) : evaluationQuery.error ? (
+                <p className="text-destructive">
+                  Error loading evaluation: {evaluationQuery.error.message}
+                </p>
+              ) : evaluationQuery.data ? (
+                <>
+                  {/* Chapter Comprehension */}
+                  <div className="bg-muted/50 rounded-lg p-4">
+                    <div className="flex items-center justify-between">
+                      <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
+                        Chapter Comprehension
+                      </h4>
+                      <span
+                        className={`px-3 py-1 rounded-full text-sm font-medium ${
+                          evaluationQuery.data.chapterComprehension ===
+                          "complete"
+                            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                            : evaluationQuery.data.chapterComprehension ===
+                              "partial"
+                            ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+                            : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                        }`}
+                      >
+                        {evaluationQuery.data.chapterComprehension ===
+                        "complete"
+                          ? "✓ Complete"
+                          : evaluationQuery.data.chapterComprehension ===
+                            "partial"
+                          ? "◐ Partial"
+                          : "○ None"}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* CEFR Progress Status */}
+                  <div className="bg-muted/50 rounded-lg p-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
+                        CEFR Progress Status
+                      </h4>
+                      <span
+                        className={`px-2 py-0.5 rounded text-xs font-medium ${
+                          evaluationQuery.data.cefrProgressCheck.status === "ok"
+                            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
+                            : evaluationQuery.data.cefrProgressCheck.status ===
+                              "warning"
+                            ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
+                            : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
+                        }`}
+                      >
+                        {evaluationQuery.data.cefrProgressCheck.status.toUpperCase()}
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-4 text-sm">
+                      <div>
+                        <span className="text-muted-foreground">
+                          Alignment:{" "}
+                        </span>
+                        <span className="font-medium capitalize">
+                          {
+                            evaluationQuery.data.cefrProgressCheck
+                              .overallAlignment.relativeToCefr
+                          }{" "}
+                          CEFR level
+                        </span>
+                      </div>
+                      <div>
+                        <span className="text-muted-foreground">
+                          Confidence:{" "}
+                        </span>
+                        <span className="font-medium">
+                          {Math.round(
+                            evaluationQuery.data.cefrProgressCheck
+                              .overallAlignment.confidence * 100
+                          )}
+                          %
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Alerts */}
+                  {evaluationQuery.data.cefrProgressCheck.alerts.length > 0 && (
+                    <div className="space-y-2">
+                      <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                        Alerts
+                      </h4>
+                      <div className="space-y-2">
+                        {evaluationQuery.data.cefrProgressCheck.alerts.map(
+                          (alert, idx) => (
+                            <div
+                              key={idx}
+                              className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 text-sm text-yellow-800 dark:text-yellow-200"
+                            >
+                              {alert}
+                            </div>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Requirements Met */}
+                  <div className="space-y-3">
+                    <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                      <Target className="w-4 h-4" />
+                      Requirements Assessment
+                    </h4>
+                    <div className="space-y-2">
+                      {evaluationQuery.data.cefrProgressCheck.requirementsMet.map(
+                        (req, idx) => (
+                          <div
+                            key={idx}
+                            className={`rounded-lg p-3 border ${
+                              req.met
+                                ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
+                                : "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
+                            }`}
+                          >
+                            <div className="flex items-start gap-2">
+                              {req.met ? (
+                                <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+                              ) : (
+                                <XCircle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
+                              )}
+                              <div className="flex-1 min-w-0">
+                                <p className="font-medium text-sm">
+                                  {req.requirement}
+                                </p>
+                                <p className="text-xs text-muted-foreground mt-1">
+                                  {req.evidence}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Goals In Progress */}
+                  {evaluationQuery.data.cefrProgressCheck.goalsInProgress
+                    .length > 0 && (
+                    <div className="space-y-3">
+                      <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                        <TrendingUp className="w-4 h-4" />
+                        Goals In Progress
+                      </h4>
+                      <div className="space-y-3">
+                        {evaluationQuery.data.cefrProgressCheck.goalsInProgress.map(
+                          (goal, idx) => (
+                            <div
+                              key={idx}
+                              className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4"
+                            >
+                              <div className="flex items-start justify-between gap-4 mb-2">
+                                <p className="font-medium text-sm flex-1">
+                                  {goal.goal}
+                                </p>
+                                <span className="text-xs px-2 py-1 rounded-full bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 font-medium whitespace-nowrap">
+                                  Step {goal.lastUpdatedStep}
+                                </span>
+                              </div>
+                              <div className="mb-2">
+                                <div className="flex items-center justify-between text-xs mb-1">
+                                  <span className="text-muted-foreground">
+                                    Progress
+                                  </span>
+                                  <span className="font-medium">
+                                    {goal.score}%
+                                  </span>
+                                </div>
+                                <div className="w-full bg-blue-200 dark:bg-blue-900 rounded-full h-2">
+                                  <div
+                                    className="bg-blue-600 dark:bg-blue-400 h-2 rounded-full transition-all"
+                                    style={{ width: `${goal.score}%` }}
+                                  />
+                                </div>
+                              </div>
+                              <p className="text-xs text-muted-foreground">
+                                {goal.evidence}
+                              </p>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Completed Goals */}
+                  {evaluationQuery.data.cefrProgressCheck.goalsCompleted
+                    .length > 0 && (
+                    <div className="space-y-3">
+                      <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                        <CheckCircle2 className="w-4 h-4 text-green-500" />
+                        Completed Goals
+                      </h4>
+                      <div className="space-y-2">
+                        {evaluationQuery.data.cefrProgressCheck.goalsCompleted.map(
+                          (goal, idx) => (
+                            <div
+                              key={idx}
+                              className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3"
+                            >
+                              <div className="flex items-start gap-2">
+                                <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="flex items-center justify-between gap-2">
+                                    <p className="font-medium text-sm">
+                                      {goal.goal}
+                                    </p>
+                                    {goal.progress !== null && (
+                                      <span className="text-xs font-medium text-green-700 dark:text-green-300">
+                                        {goal.progress}%
+                                      </span>
+                                    )}
+                                  </div>
+                                  {goal.evidence && (
+                                    <p className="text-xs text-muted-foreground mt-1">
+                                      {goal.evidence}
+                                    </p>
+                                  )}
+                                  {goal.completedAtStep !== null && (
+                                    <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                                      Completed at step {goal.completedAtStep}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div className="text-center py-8 text-muted-foreground">
+                  <ClipboardCheck className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                  <p>No evaluation data available yet.</p>
+                  <p className="text-sm mt-1">
+                    Complete some lesson activities to see your progress.
+                  </p>
+                </div>
+              )}
+            </div>
+            <div className="p-4 border-t flex justify-end">
+              <Button
+                variant="outline"
+                onClick={() => setShowEvaluationModal(false)}
               >
                 Close
               </Button>

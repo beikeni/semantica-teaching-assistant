@@ -74,6 +74,7 @@ export class LessonPlan {
     story: string;
     chapter: string;
   }) {
+    console.log("getChapterGrammar");
     const sheet = await googleSheetsClient.getRange(
       VOCAB_GRAMMAR_SHEET_ID,
       GRAMMAR_SHEET_RANGE
@@ -131,6 +132,7 @@ export class LessonPlan {
     story: string;
     chapter: string;
   }) {
+    console.log("getChapterVocab");
     const sheet = await googleSheetsClient.getRange(
       VOCAB_GRAMMAR_SHEET_ID,
       VOCAB_SHEET_RANGE

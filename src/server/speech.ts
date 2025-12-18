@@ -58,7 +58,7 @@ function initSpeechRecognition(ws: ServerWebSocket<SpeechSocketData>) {
     AZURE_SPEECH_REGION
   );
   
-  //   speechConfig.speechRecognitionLanguage = languageCode;
+    speechConfig.speechRecognitionLanguage = "pt-BR";
   speechConfig.setProfanity(sdk.ProfanityOption.Raw);
 
   // Create push stream for audio input (16-bit PCM, mono)

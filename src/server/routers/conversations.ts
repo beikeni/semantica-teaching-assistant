@@ -56,6 +56,7 @@ export const conversationsRouter = trpc.router({
 
         yield { type: "status" as const, status: "fetching_content" };
 
+        console.log("getting script");
         const script = await ctx.s3Manager.getChapterText({
           level,
           story,
@@ -63,6 +64,7 @@ export const conversationsRouter = trpc.router({
           section,
         });
 
+        console.log("getting grammar");
         const grammar = await LessonPlan.getChapterGrammar({
           level,
           story,
@@ -75,6 +77,7 @@ export const conversationsRouter = trpc.router({
           contextualExplanations: g.contextual_explanations,
         }));
 
+        console.log("getting vocab");
         const vocab = await LessonPlan.getChapterVocab({
           level,
           story,
@@ -91,7 +94,7 @@ export const conversationsRouter = trpc.router({
         }));
 
         yield { type: "status" as const, status: "preparing_lesson" };
-
+        console.log("getting lesson plan");
         let lessonPlan = await ctx.notionClient.getLessonPlan({
           level,
           story,
@@ -99,6 +102,7 @@ export const conversationsRouter = trpc.router({
           section,
         });
         if (!lessonPlan) {
+          console.log("no lesson plan, generating...");
           yield { type: "status" as const, status: "generating_lesson_plan" };
           const newLessonPlan: LessonPlanType | null =
             await LessonPlan.generateLessonPLan({
@@ -107,9 +111,11 @@ export const conversationsRouter = trpc.router({
               vocab: cleanedVocab,
             });
 
+          console.log("converting to markdown");
           const markdownLessonPlan = await LessonPlan.convertToMarkdown({
             lessonPlan: newLessonPlan,
           });
+          console.log("storing lesson plan");
           await notionClient.storeLessonPlan({
             level,
             story,
@@ -123,11 +129,13 @@ export const conversationsRouter = trpc.router({
         // TODO: At the moment, the grammar points and vocab come from both google sheets and the lesson plan.
 
         const cefrLessonClassificationPromise = (async () => {
+          console.log("getting cefr lesson classification");
           let cefrLessonClassification = await ctx.makeClient.getRecord({
             key: `cefrLessonClassification:${level}/${story}/${section}/${chapter}`,
           });
           if (!cefrLessonClassification) {
             console.log("no cefrLessonClassification, generating...");
+            console.log("generating cefr lesson classification");
             const cefrResponse = await openai.responses.parse({
               model: "gpt-5-mini",
               max_output_tokens: 4096,
@@ -148,8 +156,7 @@ export const conversationsRouter = trpc.router({
               }),
             });
 
-            console.log("cefrResponse", cefrResponse.output_parsed);
-
+            console.log("storing cefr lesson classification");
             await ctx.makeClient.setRecord({
               key: `cefrLessonClassification:${level}/${story}/${section}/${chapter}`,
               value: JSON.stringify(cefrResponse.output_parsed),
@@ -160,8 +167,7 @@ export const conversationsRouter = trpc.router({
             conversationId
           );
 
-          console.log("conversationItems", JSON.stringify(conversationItems));
-
+          console.log("getting user evaluation");
           const userEvaluationResponse = await openai.responses.parse({
             text: {
               format: zodTextFormat(UserEvaluationSchema, "user_evaluation"),
@@ -196,10 +202,6 @@ export const conversationsRouter = trpc.router({
 
         yield { type: "status" as const, status: "streaming_response" };
 
-        const worker = new Worker(
-          new URL("../workers/evaluation-worker.ts", import.meta.url).href
-        );
-
         const userContext: UserContext = {
           level,
           story,
@@ -212,13 +214,8 @@ export const conversationsRouter = trpc.router({
             lesson_plan: lessonPlan,
           },
         };
-        worker.postMessage({
-          query,
-          userContext,
-          userId,
-          conversationId,
-        });
 
+        console.log("streaming response");
         const stream = await openai.responses.create({
           conversation: conversationId ?? undefined,
           stream: true,
@@ -232,7 +229,7 @@ export const conversationsRouter = trpc.router({
           },
         });
 
-        let response = "";
+        console.log("streaming response 2");
         for await (const event of stream) {
           if (event.type === "response.output_text.delta") {
             yield {
@@ -247,7 +244,10 @@ export const conversationsRouter = trpc.router({
 
         yield { type: "status" as const, status: "done" };
 
-        const cefrLessonClassification = await cefrLessonClassificationPromise;
+        await cefrLessonClassificationPromise;
+
+        yield { type: "status" as const, status: "evaluation_complete" };
+
       } catch (error) {
         console.error("Stream error:", error);
         console.error("Error details:", JSON.stringify(error, null, 2));

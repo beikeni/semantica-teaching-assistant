@@ -18,7 +18,7 @@ const GoalInProgressSchema = z.object({
 const GoalCompletedSchema = z.object({
   goal: z.string(),
   status: z.literal("completed"),
-  score: z.number().min(0).max(100).nullable(),
+  progress: z.number().min(0).max(100).nullable(),
   evidence: z.string().nullable(),
   completedAtStep: z.number().int().positive().nullable(),
 });
@@ -80,7 +80,7 @@ const exampleData = {
         {
           goal: "Say shopping actions in past or present",
           status: "in_progress",
-          score: 65,
+          progress: 65,
           evidence:
             "Learner translated 'I went shopping' as 'Eu fui ao mercado' with minor pronunciation errors.",
           lastUpdatedStep: 1,

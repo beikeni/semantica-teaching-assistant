@@ -4,7 +4,6 @@ import { z } from "zod";
 
 export const s3Router = trpc.router({
   getLevels: trpc.procedure.query(async ({ input, ctx }) => {
-    console.log("getLevels");
     return await ctx.s3Manager.getLevels();
   }),
   getLevelStories: trpc.procedure

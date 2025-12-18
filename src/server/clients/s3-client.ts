@@ -50,15 +50,12 @@ export class S3Manager implements IS3Manager {
   };
 
   public getLevels = async (): Promise<string[]> => {
-    console.log("getLevels 2 ");
     const command = new ListObjectsV2Command({
       Bucket: process.env.AWS_BUCKET_NAME,
       Prefix: "",
       Delimiter: "/",
     });
-    console.log("command", command);
     const response = await client.send(command);
-    console.log("response", response);
     // CommonPrefixes contains the folder names at this level
 
     if (!response.CommonPrefixes) {
