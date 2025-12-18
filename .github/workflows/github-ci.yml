@@ -30,7 +30,7 @@ jobs:
           mkdir -p deploy
           cp -r dist deploy/
           cp -r src deploy/
-          cp package.json bun.lock deploy/
+          cp package.json bun.lock ecosystem.config.cjs deploy/
 
       - name: Ensure target directory exists
         uses: appleboy/ssh-action@v1.2.0
