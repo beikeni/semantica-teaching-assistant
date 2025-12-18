@@ -1,9 +1,14 @@
-import { Client } from "@notionhq/client";
+import {
+  Client,
+  type BlockObjectResponse,
+  type PageObjectResponse,
+} from "@notionhq/client";
 import { openai } from "./openai-client";
 import { LESSON_PLANNER_PROMPT_ID } from "../lib/constants";
 import { zodTextFormat } from "openai/helpers/zod";
 // import { LessonPlanSchema } from "../models/lessonPlan";
 import { LessonPlan } from "../application/LessonPlan";
+import type { INotionClient } from "./interfaces";
 
 const NOTION_TEXT_LIMIT = 2000;
 
@@ -42,7 +47,7 @@ function splitTextIntoChunks(text: string): string[] {
   return chunks.filter((chunk) => chunk.length > 0);
 }
 
-class NotionClient {
+export class NotionClient implements INotionClient {
   private readonly client = new Client({
     auth: process.env.NOTION_API_KEY!,
   });
@@ -78,7 +83,7 @@ class NotionClient {
     story: string;
     chapter: string;
     section: string;
-  }) {
+  }): Promise<{ pageContent: string } | null> {
     const datasource = await this.client.dataSources.query({
       data_source_id: this.dataSourceId,
       filter: {
@@ -93,7 +98,21 @@ class NotionClient {
       return null;
     }
 
-    return datasource.results[0];
+    const lessonPlanPage = datasource.results[0] as PageObjectResponse;
+
+    // This does not account for nested blocks but it's ok because there shouldnt be any
+    const childrenBlocks = await this.client.blocks.children.list({
+      block_id: lessonPlanPage.id,
+      page_size: 100,
+    });
+
+    const pageContent = childrenBlocks.results
+      .filter((block): block is BlockObjectResponse => "type" in block)
+      .filter((block) => block.type === "paragraph")
+      .map((block) => block.paragraph?.rich_text[0]?.plain_text)
+      .join("\n");
+
+    return { pageContent };
   }
 
   public async createLessonPlan({
@@ -108,7 +127,7 @@ class NotionClient {
     chapter: string;
     section: string;
     lessonPlan: LessonPlan;
-  }) {
+  }): Promise<void> {
     const datasource = await this.client.dataSources.query({
       data_source_id: this.dataSourceId,
       filter: {
@@ -120,7 +139,7 @@ class NotionClient {
     });
 
     if (datasource.results.length > 0) {
-      return null;
+      return;
     }
 
     const readableLessonPlan = await LessonPlan.convertToReadableFormat({
@@ -142,7 +161,7 @@ class NotionClient {
       },
     }));
 
-    const page = await this.client.pages.create({
+    await this.client.pages.create({
       parent: {
         type: "data_source_id",
         data_source_id: this.dataSourceId,
@@ -170,8 +189,6 @@ class NotionClient {
       },
       children: paragraphBlocks,
     });
-
-    return page;
   }
 
   public async getPage({ id }: { id: string }) {

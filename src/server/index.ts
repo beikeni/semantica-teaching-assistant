@@ -11,6 +11,16 @@ import {
 import { notionRouter } from "./routers/notion";
 import { googleSheetsRouter } from "./routers/google-sheets";
 import { testRouter } from "./routers/test";
+import type {
+  IGoogleSheetsClient,
+  IS3Manager,
+  INotionClient,
+  IMakeClient,
+} from "./clients/interfaces";
+import { googleSheetsClient } from "./clients/google-sheets";
+import { notionClient } from "./clients/notion-client";
+import { makeClient } from "./clients/make-client";
+import { s3Manager } from "./clients/s3-client";
 
 const isProduction = process.env.NODE_ENV === "production";
 
@@ -26,9 +36,23 @@ const appRouter = trpc.router({
   test: testRouter,
 });
 
-export const createContext = () => {
-  return {};
+export type AppContext = {
+  googleSheetsClient: IGoogleSheetsClient;
+  notionClient: INotionClient;
+  s3Manager: IS3Manager;
+  makeClient: IMakeClient;
 };
+
+export const createContext = (): AppContext => {
+  return {
+    googleSheetsClient: googleSheetsClient,
+    notionClient: notionClient,
+    s3Manager: s3Manager,
+    makeClient: makeClient,
+  };
+};
+
+export type Context = AppContext;
 
 // Production: serve pre-built static files from dist/
 const serveProductionStatic = async (req: Request): Promise<Response> => {

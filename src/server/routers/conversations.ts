@@ -26,7 +26,7 @@ const streamResponseInput = z.object({
 export const conversationsRouter = trpc.router({
   streamResponse: trpc.procedure
     .input(streamResponseInput)
-    .mutation(async function* ({ input }) {
+    .mutation(async function* ({ input, ctx }) {
       // Yield immediately to keep connection alive
       yield { type: "status" as const, status: "loading" };
 
@@ -47,7 +47,7 @@ export const conversationsRouter = trpc.router({
 
         yield { type: "status" as const, status: "fetching_content" };
 
-        const script = await S3Manager.getChapterText({
+        const script = await ctx.s3Manager.getChapterText({
           level,
           story,
           chapter,
@@ -83,7 +83,7 @@ export const conversationsRouter = trpc.router({
 
         yield { type: "status" as const, status: "preparing_lesson" };
 
-        let lessonPlan = await MakeClient.getRecord({
+        let lessonPlan = await ctx.makeClient.getRecord({
           key: `lesson-plan:${level}:${story}:${section}:${chapter}`,
         });
 
@@ -94,7 +94,7 @@ export const conversationsRouter = trpc.router({
             grammar: cleanedGrammar,
             vocab: cleanedVocab,
           });
-          await MakeClient.setRecord({
+          await ctx.makeClient.setRecord({
             key: `lesson-plan:${level}:${story}:${section}:${chapter}`,
             value: JSON.stringify(lessonPlan),
           });
@@ -157,6 +157,10 @@ export const conversationsRouter = trpc.router({
         }
 
         yield { type: "status" as const, status: "done" };
+
+        // call to responses api to grade the output
+        // aosdasdjaoijsd 
+        
       } catch (error) {
         console.error("Stream error:", error);
         console.error("Error details:", JSON.stringify(error, null, 2));

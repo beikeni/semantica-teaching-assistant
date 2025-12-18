@@ -1,11 +1,7 @@
-export class MakeClient {
-  public static async setRecord({
-    key,
-    value,
-  }: {
-    key: string;
-    value: string;
-  }) {
+import type { IMakeClient } from "./interfaces";
+
+export class MakeClient implements IMakeClient {
+  public async setRecord({ key, value }: { key: string; value: string }) {
     const makeSetRecordWebhookUrl = process.env.MAKE_SET_RECORD_WEBHOOK_URL;
     if (!makeSetRecordWebhookUrl) {
       throw new Error("MAKE_SET_RECORD_WEBHOOK_URL is not set");
@@ -24,7 +20,7 @@ export class MakeClient {
     return;
   }
 
-  public static async getRecord({ key }: { key: string }): Promise<any | null> {
+  public async getRecord({ key }: { key: string }): Promise<any | null> {
     try {
       const makeGetRecordWebhookUrl = process.env.MAKE_GET_RECORD_WEBHOOK_URL;
       if (!makeGetRecordWebhookUrl) {
@@ -45,3 +41,5 @@ export class MakeClient {
     }
   }
 }
+
+export const makeClient = new MakeClient();

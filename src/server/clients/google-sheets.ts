@@ -1,4 +1,5 @@
 import { google, sheets_v4 } from "googleapis";
+import type { IGoogleSheetsClient } from "./interfaces";
 
 export type SheetRange = {
   spreadsheetId: string;
@@ -11,7 +12,16 @@ export type RangeValues = {
   values: string[][] | null;
 };
 
-class GoogleSheetsClient {
+export type SpreadsheetInfo = {
+  title: string;
+  sheets: {
+    sheetId: string;
+    title: string;
+    index: number;
+  }[];
+};
+
+export class GoogleSheetsClient implements IGoogleSheetsClient {
   private sheetsClient: sheets_v4.Sheets | null = null;
 
   private async getClient(): Promise<sheets_v4.Sheets> {
@@ -120,7 +130,7 @@ class GoogleSheetsClient {
    * @param spreadsheetId - The ID of the spreadsheet
    * @returns Spreadsheet metadata
    */
-  async getSpreadsheetInfo(spreadsheetId: string) {
+  async getSpreadsheetInfo(spreadsheetId: string): Promise<SpreadsheetInfo> {
     const sheets = await this.getClient();
 
     const response = await sheets.spreadsheets.get({
@@ -132,11 +142,11 @@ class GoogleSheetsClient {
       title: response.data.properties?.title ?? "",
       sheets:
         response.data.sheets?.map((s) => ({
-          sheetId: s.properties?.sheetId,
-          title: s.properties?.title,
-          index: s.properties?.index,
+          sheetId: s.properties?.sheetId?.toString() ?? "",
+          title: s.properties?.title ?? "",
+          index: s.properties?.index ?? 0,
         })) ?? [],
-    };
+    } as SpreadsheetInfo;
   }
 }
 

@@ -6,6 +6,11 @@ export const notionRouter = trpc.router({
   getDatabaseItems: trpc.procedure.query(async () => {
     return await notionClient.getItems();
   }),
+  getLessonPlan: trpc.procedure
+    .input(z.object({ level: z.string(), story: z.string(), chapter: z.string(), section: z.string() }))
+    .query(async ({ input }) => {
+      return await notionClient.getLessonPlan({ level: input.level, story: input.story, chapter: input.chapter, section: input.section });
+    }),
   getPage: trpc.procedure
     .input(z.object({ id: z.string() }))
     .query(async ({ input }) => {
