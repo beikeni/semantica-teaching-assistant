@@ -18,7 +18,7 @@ if (!AZURE_SPEECH_KEY || !AZURE_SPEECH_REGION) {
  */
 export type SpeechEvent =
   | { event: "recognizing"; text: string }
-  | { event: "recognized"; text: string }
+  | { event: "recognized"; text: string; detectedLanguage?: string }
   | { event: "nomatch" }
   | { event: "canceled"; reason: string; error?: string }
   | { event: "sessionStopped" }
@@ -30,7 +30,7 @@ export type SpeechEvent =
  */
 export interface SpeechSocketData {
   sampleRate: number;
-  languageCode: string;
+  languageCode: string | undefined;
   pushStream: sdk.PushAudioInputStream | null;
   recognizer: sdk.SpeechRecognizer | null;
   cleanedUp: boolean;
@@ -50,25 +50,34 @@ export function getSpeechStatus() {
  * Initialize speech recognition for a WebSocket connection
  */
 function initSpeechRecognition(ws: ServerWebSocket<SpeechSocketData>) {
-  const { sampleRate, languageCode } = ws.data;
+  const { sampleRate } = ws.data;
 
   // Create speech config for this session
   const speechConfig = sdk.SpeechConfig.fromSubscription(
     AZURE_SPEECH_KEY,
     AZURE_SPEECH_REGION
   );
-  
-    speechConfig.speechRecognitionLanguage = "pt-BR";
+
   speechConfig.setProfanity(sdk.ProfanityOption.Raw);
+
+  // Configure auto-detection for Portuguese (Brazil) and English (US)
+  const autoDetectConfig = sdk.AutoDetectSourceLanguageConfig.fromLanguages([
+    "pt-BR",
+    "en-US",
+  ]);
 
   // Create push stream for audio input (16-bit PCM, mono)
   const format = sdk.AudioStreamFormat.getWaveFormatPCM(sampleRate, 16, 1);
   const pushStream = sdk.AudioInputStream.createPushStream(format);
   ws.data.pushStream = pushStream;
 
-  // Create recognizer
+  // Create recognizer with auto language detection
   const audioConfig = sdk.AudioConfig.fromStreamInput(pushStream);
-  const recognizer = new sdk.SpeechRecognizer(speechConfig, audioConfig);
+  const recognizer = sdk.SpeechRecognizer.FromConfig(
+    speechConfig,
+    autoDetectConfig,
+    audioConfig
+  );
   ws.data.recognizer = recognizer;
 
   const sendEvent = (event: SpeechEvent) => {
@@ -89,7 +98,16 @@ function initSpeechRecognition(ws: ServerWebSocket<SpeechSocketData>) {
   // Event: Final recognition results
   recognizer.recognized = (_s, e) => {
     if (e.result.reason === sdk.ResultReason.RecognizedSpeech) {
-      sendEvent({ event: "recognized", text: e.result.text });
+      // Get the detected language from auto-detection
+      const autoDetectResult = sdk.AutoDetectSourceLanguageResult.fromResult(
+        e.result
+      );
+      const detectedLanguage = autoDetectResult.language;
+      sendEvent({
+        event: "recognized",
+        text: e.result.text,
+        detectedLanguage: detectedLanguage || undefined,
+      });
     } else if (e.result.reason === sdk.ResultReason.NoMatch) {
       sendEvent({ event: "nomatch" });
     }

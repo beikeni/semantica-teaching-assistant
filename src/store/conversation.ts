@@ -28,6 +28,7 @@ type ConversationState = {
   mode: string;
   lastClientStatus: "" | "Dialogue Reading complete";
   conversationId: string;
+  transcriptionLanguage: "pt-BR" | "en-US" | undefined;
 
   // Saved conversations
   conversations: Record<string, ConversationData>;
@@ -44,6 +45,7 @@ type ConversationState = {
   setLearnerId: (id: string) => void;
   setLastClientStatus: (status: "" | "Dialogue Reading complete") => void;
   setConversationId: (id: string) => void;
+  setTranscriptionLanguage: (lang: "pt-BR" | "en-US" | undefined) => void;
   saveConversation: (conversationId: string) => void;
   addMessage: (text: string, isAgent: boolean) => void;
   setIsSubmitting: (v: boolean) => void;
@@ -62,6 +64,7 @@ export const useConversationStore = create<ConversationState>()(
       mode: "Teacher[Script]",
       lastClientStatus: "",
       conversationId: "",
+      transcriptionLanguage: undefined,
       conversations: {},
       messages: [],
       isSubmitting: false,
@@ -77,6 +80,9 @@ export const useConversationStore = create<ConversationState>()(
       setLearnerId: (learnerId) => set({ learnerId }),
 
       setLastClientStatus: (lastClientStatus) => set({ lastClientStatus }),
+
+      setTranscriptionLanguage: (transcriptionLanguage) =>
+        set({ transcriptionLanguage }),
 
       setConversationId: (newConversationId) => {
         const {

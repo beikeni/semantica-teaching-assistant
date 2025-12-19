@@ -70,7 +70,7 @@ const createSpeechWsHandler =
       url.searchParams.get("sampleRate") ?? "48000",
       10
     );
-    const languageCode = url.searchParams.get("language") ?? "pt-BR";
+    const languageCode = url.searchParams.get("language") || undefined;
 
     const upgraded = server.upgrade(req, {
       data: {

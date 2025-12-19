@@ -60,7 +60,7 @@ const SAMPLE_RATE = 48000;
 
 type SpeechEvent =
   | { event: "recognizing"; text: string }
-  | { event: "recognized"; text: string }
+  | { event: "recognized"; text: string; detectedLanguage?: string }
   | { event: "nomatch" }
   | { event: "canceled"; reason: string; error?: string }
   | { event: "sessionStopped" }
@@ -82,6 +82,7 @@ export function SpeechTester() {
   };
 
   const [transcript, setTranscript] = useState("");
+  const [detectedLanguage, setDetectedLanguage] = useState<string | null>(null);
   const [streamingText, setStreamingText] = useState("");
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("idle");
   const [handsOffMode, setHandsOffMode] = useState(false);
@@ -274,6 +275,7 @@ export function SpeechTester() {
     if (statusRef.current !== "idle") return;
     setStatus("connecting");
     setTranscript("");
+    setDetectedLanguage(null);
 
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -298,7 +300,7 @@ export function SpeechTester() {
           .split("/")
           .slice(0, 2)
           .join("/") || "";
-      const wsUrl = `${wsProtocol}//${window.location.host}${basePath}/api/speech/ws?sampleRate=${SAMPLE_RATE}`; //&language=pt-BR
+      const wsUrl = `${wsProtocol}//${window.location.host}${basePath}/api/speech/ws?sampleRate=${SAMPLE_RATE}`;
       const ws = new WebSocket(wsUrl);
       ws.binaryType = "arraybuffer";
       wsRef.current = ws;
@@ -325,6 +327,9 @@ export function SpeechTester() {
           const evt = JSON.parse(event.data) as SpeechEvent;
           if (evt.event === "recognized") {
             setTranscript((prev) => (prev + " " + evt.text).trim());
+            if (evt.detectedLanguage) {
+              setDetectedLanguage(evt.detectedLanguage);
+            }
           }
         } catch {}
       };
@@ -816,9 +821,18 @@ export function SpeechTester() {
         {transcript && (
           <div className="px-4 py-2 border-t bg-muted/30">
             <div className="flex items-center justify-between gap-4">
-              <p className="text-sm text-muted-foreground flex-1">
-                Transcript: {transcript}
-              </p>
+              <div className="flex items-center gap-2 flex-1">
+                {detectedLanguage && (
+                  <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
+                    {detectedLanguage === "pt-BR"
+                      ? "🇧🇷 PT"
+                      : detectedLanguage === "en-US"
+                      ? "🇺🇸 EN"
+                      : detectedLanguage}
+                  </span>
+                )}
+                <p className="text-sm text-muted-foreground">{transcript}</p>
+              </div>
               {handsOffMode && autoSendCountdown !== null && (
                 <div className="flex items-center gap-2 text-primary">
                   <div className="relative w-6 h-6">
