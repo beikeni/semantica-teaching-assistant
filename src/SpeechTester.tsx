@@ -658,7 +658,7 @@ export function SpeechTester() {
             Input Settings
           </h2>
 
-          <label className="flex items-center gap-3 cursor-pointer group">
+          {/* <label className="flex items-center gap-3 cursor-pointer group">
             <div className="relative">
               <input
                 type="checkbox"
@@ -675,7 +675,7 @@ export function SpeechTester() {
                 Auto-send after 3s pause
               </span>
             </div>
-          </label>
+          </label> */}
 
           {handsOffMode && status === "recording" && (
             <div className="text-xs text-primary bg-primary/10 rounded-md px-3 py-2 flex items-center gap-2">
