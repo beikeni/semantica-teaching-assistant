@@ -3,6 +3,7 @@ import type { Server } from "bun";
 import {
   getSpeechStatus,
   speechWebSocket,
+  handleTranscribeRequest,
   type SpeechSocketData,
 } from "./speech";
 import { appRouter, createContext } from "./router";
@@ -104,6 +105,7 @@ const createTrpcHandler = (endpoint: string) => (req: Request) =>
 // So the server always receives requests at root paths (/, /api/*, etc.)
 const routes: Record<string, unknown> = {
   "/api/speech/ws": createSpeechWsHandler(),
+  "/api/speech/transcribe": handleTranscribeRequest,
   "/api/*": createTrpcHandler("/api"),
 };
 
@@ -129,6 +131,7 @@ console.log(
   })`
 );
 console.log("🎤 Speech WebSocket: ws://localhost:3000/api/speech/ws");
+console.log("🎤 Speech Transcribe: POST http://localhost:3000/api/speech/transcribe");
 console.log(
   `📊 Speech status: ${
     getSpeechStatus().configured

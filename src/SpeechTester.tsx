@@ -24,7 +24,7 @@ import {
   Target,
   TrendingUp,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { marked } from "marked";
 import { useTRPC } from "./lib/trpc";
 import { useConversationStore } from "./store/conversation";
@@ -38,6 +38,15 @@ type StreamStatus =
   | "streaming_response"
   | "done"
   | "evaluation_complete";
+
+type RecordingStatus = "idle" | "recording" | "transcribing";
+
+interface TranscriptionResult {
+  success: boolean;
+  text: string;
+  segments: Array<{ text: string; language: string | null }>;
+  error?: string;
+}
 
 // Configure marked for safe rendering
 marked.setOptions({
@@ -57,34 +66,144 @@ function Markdown({ content }: { content: string }) {
 }
 
 const SAMPLE_RATE = 48000;
+const MAX_RECORDING_SECONDS = 30;
 
-type SpeechEvent =
-  | { event: "recognizing"; text: string }
-  | { event: "recognized"; text: string; detectedLanguage?: string }
-  | { event: "nomatch" }
-  | { event: "canceled"; reason: string; error?: string }
-  | { event: "sessionStopped" }
-  | { event: "started" }
-  | { event: "error"; message: string };
+// Waveform visualization component
+function Waveform({
+  analyser,
+  isActive,
+}: {
+  analyser: AnalyserNode | null;
+  isActive: boolean;
+}) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const animationRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    if (!analyser || !isActive || !canvasRef.current) {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+      return;
+    }
+
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    const bufferLength = analyser.frequencyBinCount;
+    const dataArray = new Uint8Array(bufferLength);
+
+    const draw = () => {
+      if (!isActive) return;
+
+      animationRef.current = requestAnimationFrame(draw);
+      analyser.getByteTimeDomainData(dataArray);
+
+      // Clear canvas with transparent background
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw waveform
+      ctx.lineWidth = 2;
+      ctx.strokeStyle = "hsl(var(--primary))";
+      ctx.beginPath();
+
+      const sliceWidth = canvas.width / bufferLength;
+      let x = 0;
+
+      for (let i = 0; i < bufferLength; i++) {
+        const v = (dataArray[i] ?? 128) / 128.0;
+        const y = (v * canvas.height) / 2;
+
+        if (i === 0) {
+          ctx.moveTo(x, y);
+        } else {
+          ctx.lineTo(x, y);
+        }
+
+        x += sliceWidth;
+      }
+
+      ctx.lineTo(canvas.width, canvas.height / 2);
+      ctx.stroke();
+    };
+
+    draw();
+
+    return () => {
+      if (animationRef.current) {
+        cancelAnimationFrame(animationRef.current);
+        animationRef.current = null;
+      }
+    };
+  }, [analyser, isActive]);
+
+  return (
+    <canvas
+      ref={canvasRef}
+      width={300}
+      height={60}
+      className="w-full h-[60px] rounded-md bg-muted/30"
+    />
+  );
+}
+
+// Recording timer display component
+function RecordingTimer({
+  seconds,
+  maxSeconds,
+}: {
+  seconds: number;
+  maxSeconds: number;
+}) {
+  const remaining = maxSeconds - seconds;
+  const progress = (seconds / maxSeconds) * 100;
+  const isNearLimit = remaining <= 5;
+
+  const formatTime = (s: number) => {
+    const mins = Math.floor(s / 60);
+    const secs = s % 60;
+    return `${mins}:${secs.toString().padStart(2, "0")}`;
+  };
+
+  return (
+    <div className="flex items-center gap-3">
+      <div className="relative w-full h-2 bg-muted rounded-full overflow-hidden">
+        <div
+          className={`h-full transition-all duration-1000 ease-linear rounded-full ${
+            isNearLimit ? "bg-destructive" : "bg-primary"
+          }`}
+          style={{ width: `${progress}%` }}
+        />
+      </div>
+      <span
+        className={`text-sm font-mono tabular-nums min-w-[48px] text-right ${
+          isNearLimit
+            ? "text-destructive font-semibold"
+            : "text-muted-foreground"
+        }`}
+      >
+        {formatTime(seconds)}
+      </span>
+    </div>
+  );
+}
 
 export function SpeechTester() {
   const trpc = useTRPC();
   const store = useConversationStore();
-  const [status, setStatusState] = useState<
-    "idle" | "recording" | "connecting"
-  >("idle");
-  const statusRef = useRef<"idle" | "recording" | "connecting">("idle");
 
-  // Wrapper to keep ref in sync with state
-  const setStatus = (newStatus: "idle" | "recording" | "connecting") => {
-    statusRef.current = newStatus;
-    setStatusState(newStatus);
-  };
-
+  // Recording state
+  const [recordingStatus, setRecordingStatus] =
+    useState<RecordingStatus>("idle");
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [transcript, setTranscript] = useState("");
   const [transcriptSegments, setTranscriptSegments] = useState<
     Array<{ text: string; language: string | null }>
   >([]);
+
+  // Streaming/chat state
   const [streamingText, setStreamingText] = useState("");
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("idle");
   const [handsOffMode, setHandsOffMode] = useState(false);
@@ -92,15 +211,22 @@ export function SpeechTester() {
     null
   );
 
-  const wsRef = useRef<WebSocket | null>(null);
+  // Audio recording refs
   const audioCtxRef = useRef<AudioContext | null>(null);
-  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const mediaStreamRef = useRef<MediaStream | null>(null);
+  const audioChunksRef = useRef<Int16Array[]>([]);
+  const processorRef = useRef<ScriptProcessorNode | null>(null);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // UI refs
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const streamingTextRef = useRef("");
   const handsOffTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const lastTranscriptRef = useRef("");
+
+  // Modal state
   const [showTranscriptModal, setShowTranscriptModal] = useState(false);
   const [showEvaluationModal, setShowEvaluationModal] = useState(false);
   const [evaluationUpdated, setEvaluationUpdated] = useState(false);
@@ -180,31 +306,185 @@ export function SpeechTester() {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [store.messages, streamingText]);
 
-  const cleanupAudio = () => {
+  // Cleanup audio resources
+  const cleanupAudio = useCallback(() => {
+    // Stop recording timer
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+
+    // Disconnect audio nodes
     processorRef.current?.disconnect();
     sourceRef.current?.disconnect();
+    analyserRef.current?.disconnect();
+
+    // Stop media stream tracks
     mediaStreamRef.current?.getTracks().forEach((t) => t.stop());
+
+    // Close audio context
+    if (audioCtxRef.current && audioCtxRef.current.state !== "closed") {
+      audioCtxRef.current.close();
+    }
+
+    // Clear refs
     processorRef.current = null;
     sourceRef.current = null;
+    analyserRef.current = null;
     mediaStreamRef.current = null;
-    if (audioCtxRef.current) {
-      audioCtxRef.current.close();
-      audioCtxRef.current = null;
-    }
-  };
-
-  const stopRecording = () => {
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-    cleanupAudio();
-    setStatus("idle");
-  };
-
-  useEffect(() => {
-    return () => stopRecording();
+    audioCtxRef.current = null;
   }, []);
+
+  // Send recorded audio to server for transcription
+  const transcribeAudio =
+    useCallback(async (): Promise<TranscriptionResult> => {
+      const chunks = audioChunksRef.current;
+      if (chunks.length === 0) {
+        return {
+          success: false,
+          text: "",
+          segments: [],
+          error: "No audio recorded",
+        };
+      }
+
+      // Combine all chunks into a single buffer
+      const totalLength = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+      const combinedBuffer = new Int16Array(totalLength);
+      let offset = 0;
+      for (const chunk of chunks) {
+        combinedBuffer.set(chunk, offset);
+        offset += chunk.length;
+      }
+
+      // Get base path from current location
+      const basePath =
+        window.location.pathname
+          .replace(/\/$/, "")
+          .split("/")
+          .slice(0, 2)
+          .join("/") || "";
+
+      const url = `${window.location.origin}${basePath}/api/speech/transcribe?sampleRate=${SAMPLE_RATE}`;
+
+      try {
+        const response = await fetch(url, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/octet-stream",
+          },
+          body: combinedBuffer.buffer,
+        });
+
+        const result: TranscriptionResult = await response.json();
+        return result;
+      } catch (err) {
+        return {
+          success: false,
+          text: "",
+          segments: [],
+          error: err instanceof Error ? err.message : "Network error",
+        };
+      }
+    }, []);
+
+  // Stop recording and transcribe
+  const stopRecording = useCallback(async () => {
+    if (recordingStatus !== "recording") return;
+
+    setRecordingStatus("transcribing");
+    cleanupAudio();
+
+    // Transcribe the recorded audio
+    const result = await transcribeAudio();
+
+    if (result.success && result.text) {
+      setTranscript(result.text);
+      setTranscriptSegments(result.segments);
+    } else if (result.error) {
+      console.error("Transcription error:", result.error);
+    }
+
+    // Clear audio chunks for next recording
+    audioChunksRef.current = [];
+    setRecordingSeconds(0);
+    setRecordingStatus("idle");
+  }, [recordingStatus, cleanupAudio, transcribeAudio]);
+
+  // Start recording audio locally
+  const startRecording = useCallback(async () => {
+    if (recordingStatus !== "idle") return;
+
+    setTranscript("");
+    setTranscriptSegments([]);
+    audioChunksRef.current = [];
+    setRecordingSeconds(0);
+
+    try {
+      const mediaStream = await navigator.mediaDevices.getUserMedia({
+        audio: { channelCount: 1, sampleRate: SAMPLE_RATE },
+      });
+      mediaStreamRef.current = mediaStream;
+
+      const audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+      audioCtxRef.current = audioCtx;
+
+      // Create source from microphone
+      const source = audioCtx.createMediaStreamSource(mediaStream);
+      sourceRef.current = source;
+
+      // Create analyser for waveform visualization
+      const analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 2048;
+      analyserRef.current = analyser;
+
+      // Create processor to capture PCM data
+      const processor = audioCtx.createScriptProcessor(4096, 1, 1);
+      processorRef.current = processor;
+
+      processor.onaudioprocess = (event) => {
+        const input = event.inputBuffer.getChannelData(0);
+        const pcm = new Int16Array(input.length);
+        for (let i = 0; i < input.length; i++) {
+          const sample = input[i] ?? 0;
+          const s = Math.max(-1, Math.min(1, sample));
+          pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
+        }
+        audioChunksRef.current.push(pcm);
+      };
+
+      // Connect audio graph: source -> analyser -> processor -> destination
+      source.connect(analyser);
+      analyser.connect(processor);
+      processor.connect(audioCtx.destination);
+
+      setRecordingStatus("recording");
+
+      // Start recording timer
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => {
+          const next = prev + 1;
+          // Auto-stop at max duration
+          if (next >= MAX_RECORDING_SECONDS) {
+            stopRecording();
+          }
+          return next;
+        });
+      }, 1000);
+    } catch (err) {
+      console.error("Failed to start recording:", err);
+      cleanupAudio();
+      setRecordingStatus("idle");
+    }
+  }, [recordingStatus, cleanupAudio, stopRecording]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      cleanupAudio();
+      audioChunksRef.current = [];
+    };
+  }, [cleanupAudio]);
 
   // Hands-off mode: auto-send after 3 seconds of pause with countdown
   useEffect(() => {
@@ -217,13 +497,13 @@ export function SpeechTester() {
 
     // Only auto-send if:
     // - Hands-off mode is enabled
-    // - Currently recording
+    // - Not currently recording
     // - There's transcript text
     // - Not currently submitting
     // - Transcript has changed (new speech detected)
     if (
       handsOffMode &&
-      status === "recording" &&
+      recordingStatus === "idle" &&
       transcript.trim() &&
       !store.isSubmitting &&
       transcript !== lastTranscriptRef.current
@@ -270,84 +550,7 @@ export function SpeechTester() {
         handsOffTimeoutRef.current = null;
       }
     };
-  }, [transcript, handsOffMode, status, store.isSubmitting]);
-
-  const startRecording = async () => {
-    // Use ref for synchronous check to handle async restarts properly
-    if (statusRef.current !== "idle") return;
-    setStatus("connecting");
-    setTranscript("");
-    setTranscriptSegments([]);
-
-    try {
-      const mediaStream = await navigator.mediaDevices.getUserMedia({
-        audio: { channelCount: 1, sampleRate: SAMPLE_RATE },
-      });
-      mediaStreamRef.current = mediaStream;
-
-      const audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
-      audioCtxRef.current = audioCtx;
-
-      const source = audioCtx.createMediaStreamSource(mediaStream);
-      sourceRef.current = source;
-
-      const processor = audioCtx.createScriptProcessor(4096, 1, 1);
-      processorRef.current = processor;
-
-      const wsProtocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      // Get base path from current location (e.g., "/sta-demo-3" from "/sta-demo-3/")
-      const basePath =
-        window.location.pathname
-          .replace(/\/$/, "")
-          .split("/")
-          .slice(0, 2)
-          .join("/") || "";
-      const wsUrl = `${wsProtocol}//${window.location.host}${basePath}/api/speech/ws?sampleRate=${SAMPLE_RATE}`;
-      const ws = new WebSocket(wsUrl);
-      ws.binaryType = "arraybuffer";
-      wsRef.current = ws;
-
-      ws.onopen = () => {
-        setStatus("recording");
-        processor.onaudioprocess = (event) => {
-          if (ws.readyState !== WebSocket.OPEN) return;
-          const input = event.inputBuffer.getChannelData(0);
-          const pcm = new Int16Array(input.length);
-          for (let i = 0; i < input.length; i++) {
-            const sample = input[i] ?? 0;
-            const s = Math.max(-1, Math.min(1, sample));
-            pcm[i] = s < 0 ? s * 0x8000 : s * 0x7fff;
-          }
-          ws.send(pcm.buffer);
-        };
-        source.connect(processor);
-        processor.connect(audioCtx.destination);
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const evt = JSON.parse(event.data) as SpeechEvent;
-          if (evt.event === "recognized") {
-            setTranscript((prev) => (prev + " " + evt.text).trim());
-            // Add segment with language for visual feedback
-            setTranscriptSegments((prev) => [
-              ...prev,
-              { text: evt.text, language: evt.detectedLanguage || null },
-            ]);
-          }
-        } catch {}
-      };
-
-      ws.onerror = () => stopRecording();
-      ws.onclose = () => {
-        cleanupAudio();
-        setStatus("idle");
-      };
-    } catch {
-      setStatus("idle");
-      cleanupAudio();
-    }
-  };
+  }, [transcript, handsOffMode, recordingStatus, store.isSubmitting]);
 
   const handleSubmit = async () => {
     if (store.isSubmitting || !canSubmit) return;
@@ -355,7 +558,8 @@ export function SpeechTester() {
       return;
 
     // Track if we should restart recording after (hands-off mode)
-    const shouldRestartRecording = handsOffMode && status === "recording";
+    const shouldRestartRecording =
+      handsOffMode && recordingStatus === "idle" && transcript.trim();
 
     // Clear hands-off timeout
     if (handsOffTimeoutRef.current) {
@@ -363,9 +567,6 @@ export function SpeechTester() {
       handsOffTimeoutRef.current = null;
     }
     lastTranscriptRef.current = "";
-
-    // Always stop recording during submission to get clean audio boundaries
-    stopRecording();
 
     store.setIsSubmitting(true);
     setStreamStatus("loading");
@@ -466,8 +667,13 @@ export function SpeechTester() {
     }
     lastTranscriptRef.current = "";
 
-    stopRecording();
+    // Cleanup audio
+    cleanupAudio();
+    audioChunksRef.current = [];
+    setRecordingStatus("idle");
+    setRecordingSeconds(0);
     setTranscript("");
+    setTranscriptSegments([]);
     setStreamingText("");
     streamingTextRef.current = "";
     setStreamStatus("idle");
@@ -681,13 +887,13 @@ export function SpeechTester() {
             </div>
           </label> */}
 
-          {handsOffMode && status === "recording" && (
+          {handsOffMode && recordingStatus === "idle" && transcript.trim() && (
             <div className="text-xs text-primary bg-primary/10 rounded-md px-3 py-2 flex items-center gap-2">
               <span className="relative flex h-2 w-2">
                 <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75" />
                 <span className="relative inline-flex rounded-full h-2 w-2 bg-primary" />
               </span>
-              Listening... will auto-send on pause
+              Will auto-send in a moment...
             </div>
           )}
         </section>
@@ -888,7 +1094,41 @@ export function SpeechTester() {
           </div>
         )}
 
-        <footer className="border-t p-4">
+        <footer className="border-t p-4 space-y-3">
+          {/* Recording UI with waveform and timer */}
+          {recordingStatus === "recording" && (
+            <div className="space-y-2">
+              <div className="flex items-center gap-3">
+                <span className="relative flex h-3 w-3">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75" />
+                  <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
+                </span>
+                <span className="text-sm font-medium text-red-600 dark:text-red-400">
+                  Recording...
+                </span>
+              </div>
+              <Waveform
+                analyser={analyserRef.current}
+                isActive={recordingStatus === "recording"}
+              />
+              <RecordingTimer
+                seconds={recordingSeconds}
+                maxSeconds={MAX_RECORDING_SECONDS}
+              />
+            </div>
+          )}
+
+          {/* Transcribing indicator */}
+          {recordingStatus === "transcribing" && (
+            <div className="flex items-center justify-center gap-2 py-2">
+              <Loader2 className="w-4 h-4 animate-spin text-primary" />
+              <span className="text-sm text-muted-foreground">
+                Transcribing audio...
+              </span>
+            </div>
+          )}
+
+          {/* Action buttons */}
           {isChatEmpty ? (
             <Button
               className="w-full"
@@ -899,7 +1139,8 @@ export function SpeechTester() {
                 !store.level ||
                 !store.story ||
                 !store.section ||
-                !store.chapter
+                !store.chapter ||
+                recordingStatus !== "idle"
               }
             >
               {store.isSubmitting ? (
@@ -919,7 +1160,11 @@ export function SpeechTester() {
               className="w-full"
               size="lg"
               onClick={handleSubmit}
-              disabled={store.isSubmitting || isWaitingForResponse}
+              disabled={
+                store.isSubmitting ||
+                isWaitingForResponse ||
+                recordingStatus !== "idle"
+              }
             >
               {isWaitingForResponse ? (
                 <>
@@ -933,7 +1178,7 @@ export function SpeechTester() {
                 </>
               )}
             </Button>
-          ) : status === "recording" ? (
+          ) : recordingStatus === "recording" ? (
             <Button
               className="w-full"
               size="lg"
@@ -942,6 +1187,11 @@ export function SpeechTester() {
             >
               <Square className="w-4 h-4 mr-2" />
               Stop Recording
+            </Button>
+          ) : recordingStatus === "transcribing" ? (
+            <Button className="w-full" size="lg" disabled>
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Processing...
             </Button>
           ) : transcript ? (
             <div className="flex gap-2">
