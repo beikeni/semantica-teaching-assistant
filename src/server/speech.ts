@@ -60,6 +60,12 @@ function initSpeechRecognition(ws: ServerWebSocket<SpeechSocketData>) {
 
   speechConfig.setProfanity(sdk.ProfanityOption.Raw);
 
+  // Enable continuous language identification for mid-session language switching
+  speechConfig.setProperty(
+    sdk.PropertyId.SpeechServiceConnection_LanguageIdMode,
+    "Continuous"
+  );
+
   // Configure auto-detection for Portuguese (Brazil) and English (US)
   const autoDetectConfig = sdk.AutoDetectSourceLanguageConfig.fromLanguages([
     "pt-BR",

@@ -82,7 +82,9 @@ export function SpeechTester() {
   };
 
   const [transcript, setTranscript] = useState("");
-  const [detectedLanguage, setDetectedLanguage] = useState<string | null>(null);
+  const [transcriptSegments, setTranscriptSegments] = useState<
+    Array<{ text: string; language: string | null }>
+  >([]);
   const [streamingText, setStreamingText] = useState("");
   const [streamStatus, setStreamStatus] = useState<StreamStatus>("idle");
   const [handsOffMode, setHandsOffMode] = useState(false);
@@ -275,7 +277,7 @@ export function SpeechTester() {
     if (statusRef.current !== "idle") return;
     setStatus("connecting");
     setTranscript("");
-    setDetectedLanguage(null);
+    setTranscriptSegments([]);
 
     try {
       const mediaStream = await navigator.mediaDevices.getUserMedia({
@@ -327,9 +329,11 @@ export function SpeechTester() {
           const evt = JSON.parse(event.data) as SpeechEvent;
           if (evt.event === "recognized") {
             setTranscript((prev) => (prev + " " + evt.text).trim());
-            if (evt.detectedLanguage) {
-              setDetectedLanguage(evt.detectedLanguage);
-            }
+            // Add segment with language for visual feedback
+            setTranscriptSegments((prev) => [
+              ...prev,
+              { text: evt.text, language: evt.detectedLanguage || null },
+            ]);
           }
         } catch {}
       };
@@ -821,17 +825,31 @@ export function SpeechTester() {
         {transcript && (
           <div className="px-4 py-2 border-t bg-muted/30">
             <div className="flex items-center justify-between gap-4">
-              <div className="flex items-center gap-2 flex-1">
-                {detectedLanguage && (
-                  <span className="shrink-0 text-xs px-2 py-0.5 rounded-full bg-primary/10 text-primary font-medium">
-                    {detectedLanguage === "pt-BR"
-                      ? "🇧🇷 PT"
-                      : detectedLanguage === "en-US"
-                      ? "🇺🇸 EN"
-                      : detectedLanguage}
+              <div className="flex-1 flex flex-wrap items-center gap-1">
+                {transcriptSegments.map((segment, idx) => (
+                  <span key={idx} className="inline-flex items-center gap-1">
+                    {segment.language && (
+                      <span
+                        className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
+                          segment.language === "pt-BR"
+                            ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
+                            : segment.language === "en-US"
+                            ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
+                            : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400"
+                        }`}
+                      >
+                        {segment.language === "pt-BR"
+                          ? "🇧🇷"
+                          : segment.language === "en-US"
+                          ? "🇺🇸"
+                          : segment.language}
+                      </span>
+                    )}
+                    <span className="text-sm text-muted-foreground">
+                      {segment.text}
+                    </span>
                   </span>
-                )}
-                <p className="text-sm text-muted-foreground">{transcript}</p>
+                ))}
               </div>
               {handsOffMode && autoSendCountdown !== null && (
                 <div className="flex items-center gap-2 text-primary">
