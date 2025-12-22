@@ -1,12 +1,41 @@
 import * as sdk from "microsoft-cognitiveservices-speech-sdk";
 import type { ServerWebSocket } from "bun";
+import type {
+  ITranscriptionProvider,
+  TranscriptionOptions,
+  TranscriptionResponse,
+} from "./clients/interfaces";
+import { AzureTranscriptionProvider } from "./clients/azure-transcription-client";
+import {
+  OpenAITranscriptionProvider,
+  type OpenAITranscriptionModel,
+} from "./clients/openai-transcription-client";
+import {
+  ElevenLabsTranscriptionProvider,
+  type ElevenLabsTranscriptionModel,
+} from "./clients/elevenlabs-transcription-client";
+
+// Re-export types for convenience
+export type {
+  ITranscriptionProvider,
+  TranscriptionOptions,
+  TranscriptionResponse,
+  OpenAITranscriptionModel,
+  ElevenLabsTranscriptionModel,
+};
+export {
+  AzureTranscriptionProvider,
+  OpenAITranscriptionProvider,
+  ElevenLabsTranscriptionProvider,
+};
 
 // Azure Speech Config from environment (Bun loads .env automatically)
 const AZURE_SPEECH_KEY = process.env.AZURE_SPEECH_KEY ?? "";
 const AZURE_SPEECH_REGION = process.env.AZURE_SPEECH_REGION ?? "";
 
 /**
- * Transcription result from batch audio processing
+ * @deprecated Use TranscriptionResponse from interfaces instead
+ * Kept for backward compatibility with existing code
  */
 export interface TranscriptionResult {
   success: boolean;
@@ -16,6 +45,28 @@ export interface TranscriptionResult {
     language: string | null;
   }>;
   error?: string;
+}
+
+// Default transcription provider instance
+let transcriptionProvider: ITranscriptionProvider =
+  new AzureTranscriptionProvider();
+
+/**
+ * Set the transcription provider to use for audio transcription
+ * @param provider - Provider implementing ITranscriptionProvider
+ */
+export function setTranscriptionProvider(
+  provider: ITranscriptionProvider
+): void {
+  transcriptionProvider = provider;
+  console.log(`🔄 Transcription provider set to: ${provider.name}`);
+}
+
+/**
+ * Get the current transcription provider
+ */
+export function getTranscriptionProvider(): ITranscriptionProvider {
+  return transcriptionProvider;
 }
 
 // Validate credentials on startup
@@ -290,197 +341,122 @@ export const speechWebSocket = {
 };
 
 /**
- * Transcribe a complete audio file using Azure Speech SDK.
+ * Transcribe a complete audio file using the configured transcription provider.
  * Uses continuous recognition with auto language detection to handle
  * mixed language utterances (pt-BR and en-US).
+ *
+ * @param audioBuffer - Raw audio data (PCM 16-bit mono)
+ * @param sampleRate - Audio sample rate in Hz (default: 16000)
+ * @returns Promise with transcription result
  */
 export async function transcribeAudioFile(
   audioBuffer: ArrayBuffer,
-  sampleRate: number = 48000
-): Promise<TranscriptionResult> {
-  if (!AZURE_SPEECH_KEY || !AZURE_SPEECH_REGION) {
+  sampleRate: number = 16000
+): Promise<TranscriptionResponse> {
+  const provider = getTranscriptionProvider();
+
+  if (!provider.isConfigured()) {
     return {
-      success: false,
       text: "",
-      segments: [],
-      error: "Azure Speech credentials not configured",
+      error: `${provider.name} is not configured`,
     };
   }
 
-  return new Promise((resolve) => {
-    const segments: Array<{ text: string; language: string | null }> = [];
-    let fullText = "";
-
-    // Create speech config
-    const speechConfig = sdk.SpeechConfig.fromSubscription(
-      AZURE_SPEECH_KEY,
-      AZURE_SPEECH_REGION
-    );
-    speechConfig.setProfanity(sdk.ProfanityOption.Raw);
-
-    // Set Portuguese as the default/fallback language (prioritized)
-    speechConfig.speechRecognitionLanguage = "pt-BR";
-
-    // Enable continuous language identification for mixed-language utterances
-    speechConfig.setProperty(
-      sdk.PropertyId.SpeechServiceConnection_LanguageIdMode,
-      "Continuous"
-    );
-
-    // Explicitly prioritize Portuguese at the start of recognition
-    speechConfig.setProperty(
-      "SpeechServiceConnection_AtStartLanguageIdPriority",
-      "pt-BR"
-    );
-
-    // Set Portuguese as the priority for single-language segments
-    speechConfig.setProperty(
-      "SpeechServiceConnection_SingleLanguageIdPriority",
-      "pt-BR"
-    );
-
-    // Configure auto-detection with Portuguese explicitly prioritized
-    const ptBRConfig = sdk.SourceLanguageConfig.fromLanguage("pt-BR");
-    const enUSConfig = sdk.SourceLanguageConfig.fromLanguage("en-US");
-    const autoDetectConfig =
-      sdk.AutoDetectSourceLanguageConfig.fromSourceLanguageConfigs([
-        ptBRConfig,
-        enUSConfig,
-      ]);
-
-    // Create push stream for audio input (16-bit PCM, mono)
-    const format = sdk.AudioStreamFormat.getWaveFormatPCM(sampleRate, 16, 1);
-    const pushStream = sdk.AudioInputStream.createPushStream(format);
-
-    // Create recognizer with auto language detection
-    const audioConfig = sdk.AudioConfig.fromStreamInput(pushStream);
-    const recognizer = sdk.SpeechRecognizer.FromConfig(
-      speechConfig,
-      autoDetectConfig,
-      audioConfig
-    );
-
-    // Track if we've resolved to avoid double resolution
-    let resolved = false;
-
-    const cleanup = () => {
-      try {
-        recognizer.close();
-        pushStream.close();
-      } catch {
-        // Ignore cleanup errors
-      }
-    };
-
-    const resolveResult = (error?: string) => {
-      if (resolved) return;
-      resolved = true;
-      cleanup();
-      resolve({
-        success: !error,
-        text: fullText.trim(),
-        segments,
-        error,
-      });
-    };
-
-    // Event: Final recognition results
-    recognizer.recognized = (_s, e) => {
-      if (
-        e.result.reason === sdk.ResultReason.RecognizedSpeech &&
-        e.result.text
-      ) {
-        const autoDetectResult = sdk.AutoDetectSourceLanguageResult.fromResult(
-          e.result
-        );
-        const detectedLanguage = autoDetectResult.language || null;
-
-        segments.push({
-          text: e.result.text,
-          language: detectedLanguage,
-        });
-        fullText += (fullText ? " " : "") + e.result.text;
-      }
-    };
-
-    // Event: Recognition canceled (error or end of stream)
-    recognizer.canceled = (_s, e) => {
-      if (e.reason === sdk.CancellationReason.Error) {
-        console.error(`Speech transcription error: ${e.errorDetails}`);
-        resolveResult(e.errorDetails || "Unknown transcription error");
-      } else if (e.reason === sdk.CancellationReason.EndOfStream) {
-        // Normal end of audio - resolve with collected results
-        console.log("✅ EndOfStream received - transcription complete");
-        resolveResult();
-      }
-    };
-
-    // Event: Session stopped
-    recognizer.sessionStopped = () => {
-      console.log("✅ Session stopped - transcription complete");
-      resolveResult();
-    };
-
-    // Start continuous recognition
-    recognizer.startContinuousRecognitionAsync(
-      () => {
-        console.log("🎤 Batch transcription started");
-
-        // Write all audio data to the push stream
-        pushStream.write(audioBuffer);
-
-        // Signal end of audio stream
-        pushStream.close();
-
-        // Calculate expected processing time based on audio length
-        // ~2 bytes per sample (16-bit), mono channel
-        const audioSeconds = audioBuffer.byteLength / (sampleRate * 2);
-        // Allow audio duration + 3 seconds for processing, minimum 5 seconds
-        const processingTimeout = Math.max(5000, (audioSeconds + 3) * 1000);
-
-        console.log(
-          `📊 Audio: ${audioSeconds.toFixed(1)}s, timeout: ${(
-            processingTimeout / 1000
-          ).toFixed(1)}s`
-        );
-
-        // Explicitly stop recognition after processing time
-        // This ensures we don't hang waiting for events that may not fire
-        setTimeout(() => {
-          if (!resolved) {
-            console.log("⏱️ Stopping recognition after processing timeout");
-            recognizer.stopContinuousRecognitionAsync(
-              () => {
-                // stopContinuousRecognitionAsync completed - resolve with results
-                resolveResult();
-              },
-              (err) => {
-                console.error("Error stopping recognition:", err);
-                resolveResult();
-              }
-            );
-          }
-        }, processingTimeout);
-      },
-      (err) => {
-        console.error("Failed to start batch transcription:", err);
-        resolveResult(String(err));
-      }
-    );
-
-    // Hard timeout after 45 seconds as a safety net
-    setTimeout(() => {
-      if (!resolved) {
-        console.error("Batch transcription hard timeout");
-        resolveResult("Transcription timeout");
-      }
-    }, 45000);
+  return provider.transcribe(audioBuffer, {
+    sampleRate,
+    language: "pt-BR",
+    additionalLanguages: ["en-US"],
   });
 }
 
 /**
+ * @deprecated Use transcribeAudioFile which returns TranscriptionResponse
+ * Legacy function for backward compatibility
+ */
+export async function transcribeAudioFileLegacy(
+  audioBuffer: ArrayBuffer,
+  sampleRate: number = 48000
+): Promise<TranscriptionResult> {
+  const response = await transcribeAudioFile(audioBuffer, sampleRate);
+
+  return {
+    success: !response.error,
+    text: response.text,
+    segments: response.text ? [{ text: response.text, language: null }] : [],
+    error: response.error,
+  };
+}
+
+/**
+ * Available transcription provider types
+ */
+export type TranscriptionProviderType =
+  | "azure"
+  | "openai"
+  | "openai-whisper"
+  | "elevenlabs";
+
+/**
+ * Provider instances cache
+ */
+const providerInstances: Record<
+  TranscriptionProviderType,
+  ITranscriptionProvider
+> = {
+  azure: new AzureTranscriptionProvider(),
+  openai: new OpenAITranscriptionProvider({ model: "gpt-4o-mini-transcribe" }),
+  "openai-whisper": new OpenAITranscriptionProvider({ model: "whisper-1" }),
+  elevenlabs: new ElevenLabsTranscriptionProvider(),
+};
+
+/**
+ * Get a transcription provider by type
+ */
+export function getProviderByType(
+  type: TranscriptionProviderType
+): ITranscriptionProvider {
+  return providerInstances[type];
+}
+
+/**
+ * Get list of available providers with their status
+ */
+export function getAvailableProviders(): Array<{
+  id: TranscriptionProviderType;
+  name: string;
+  configured: boolean;
+}> {
+  return [
+    {
+      id: "azure",
+      name: "Azure Speech Services",
+      configured: providerInstances.azure.isConfigured(),
+    },
+    {
+      id: "openai",
+      name: "OpenAI GPT-4o Transcribe",
+      configured: providerInstances.openai.isConfigured(),
+    },
+    {
+      id: "openai-whisper",
+      name: "OpenAI Whisper",
+      configured: providerInstances["openai-whisper"].isConfigured(),
+    },
+    {
+      id: "elevenlabs",
+      name: "ElevenLabs Scribe",
+      configured: providerInstances.elevenlabs.isConfigured(),
+    },
+  ];
+}
+
+/**
  * HTTP handler for POST /api/speech/transcribe
- * Accepts WAV audio file and returns transcription
+ * Accepts WAV audio file and returns transcription as simple text
+ *
+ * Query params:
+ * - sampleRate: Audio sample rate in Hz (default: 16000)
+ * - provider: Transcription provider to use (azure | openai | openai-whisper)
  */
 export async function handleTranscribeRequest(req: Request): Promise<Response> {
   // CORS headers for the response
@@ -496,55 +472,81 @@ export async function handleTranscribeRequest(req: Request): Promise<Response> {
   }
 
   if (req.method !== "POST") {
-    return new Response(JSON.stringify({ error: "Method not allowed" }), {
-      status: 405,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+    return new Response(
+      JSON.stringify({ text: "", error: "Method not allowed" }),
+      {
+        status: 405,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      }
+    );
   }
 
   try {
-    // Get sample rate from query params (default 48000)
+    // Get params from query string
     const url = new URL(req.url);
-    const sampleRate = 16000;
-    // const sampleRate = parseInt(
-    //   url.searchParams.get("sampleRate") ?? "48000",
-    //   10
-    // );
+    const sampleRate = parseInt(
+      url.searchParams.get("sampleRate") ?? "16000",
+      10
+    );
+    const providerType = (url.searchParams.get("provider") ??
+      "azure") as TranscriptionProviderType;
+
+    // Get the appropriate provider
+    const provider = providerInstances[providerType] ?? providerInstances.azure;
 
     // Get audio data from request body
     const audioBuffer = await req.arrayBuffer();
 
     if (audioBuffer.byteLength === 0) {
-      return new Response(JSON.stringify({ error: "No audio data provided" }), {
-        status: 400,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      });
+      return new Response(
+        JSON.stringify({ text: "", error: "No audio data provided" }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
+    }
+
+    if (!provider.isConfigured()) {
+      return new Response(
+        JSON.stringify({
+          text: "",
+          error: `${provider.name} is not configured`,
+        }),
+        {
+          status: 400,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     console.log(
-      `📤 Received audio for transcription: ${audioBuffer.byteLength} bytes, ${sampleRate}Hz`
+      `📤 [${provider.name}] Received audio: ${audioBuffer.byteLength} bytes, ${sampleRate}Hz`
     );
 
-    // Transcribe the audio
-    const result = await transcribeAudioFile(audioBuffer, sampleRate);
+    // Transcribe the audio using the selected provider
+    const result = await provider.transcribe(audioBuffer, {
+      sampleRate,
+      language: "pt-BR",
+      additionalLanguages: ["en-US"],
+    });
 
     console.log(
-      `📝 Transcription result: "${result.text.slice(0, 50)}${
+      `📝 [${provider.name}] Result: "${result.text.slice(0, 50)}${
         result.text.length > 50 ? "..." : ""
       }"`
     );
 
+    // Return standardized simple text response
     return new Response(JSON.stringify(result), {
-      status: result.success ? 200 : 500,
+      status: result.error ? 500 : 200,
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
   } catch (err) {
     console.error("Transcription request error:", err);
     return new Response(
       JSON.stringify({
-        success: false,
         text: "",
-        segments: [],
         error: err instanceof Error ? err.message : "Unknown error",
       }),
       {

@@ -44,10 +44,50 @@ type StreamStatus =
 
 type RecordingStatus = "idle" | "recording" | "transcribing";
 
-interface TranscriptionResult {
-  success: boolean;
+/**
+ * Available transcription provider types
+ */
+type TranscriptionProviderType =
+  | "azure"
+  | "openai"
+  | "openai-whisper"
+  | "elevenlabs";
+
+/**
+ * Provider display information
+ */
+const TRANSCRIPTION_PROVIDERS: Array<{
+  id: TranscriptionProviderType;
+  name: string;
+  description: string;
+}> = [
+  {
+    id: "azure",
+    name: "Azure Speech",
+    description: "Microsoft Azure Speech Services",
+  },
+  {
+    id: "openai",
+    name: "OpenAI GPT-4o",
+    description: "GPT-4o Mini Transcribe",
+  },
+  {
+    id: "openai-whisper",
+    name: "OpenAI Whisper",
+    description: "Original Whisper model",
+  },
+  {
+    id: "elevenlabs",
+    name: "ElevenLabs",
+    description: "ElevenLabs Scribe v2",
+  },
+];
+
+/**
+ * Standardized transcription response - simple text output
+ */
+interface TranscriptionResponse {
   text: string;
-  segments: Array<{ text: string; language: string | null }>;
   error?: string;
 }
 
@@ -62,7 +102,7 @@ function Markdown({ content }: { content: string }) {
   const html = useMemo(() => marked.parse(content) as string, [content]);
   return (
     <div
-      className="[&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_pre]:my-2 [&_pre]:bg-black/10 [&_pre]:p-2 [&_pre]:rounded [&_code]:bg-black/10 [&_code]:px-1 [&_code]:rounded [&_h1]:text-lg [&_h1]:font-bold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:font-medium [&_a]:text-primary [&_a]:underline"
+      className="[&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0 [&_pre]:my-2 [&_pre]:bg-black/10 [&_pre]:p-2 [&_pre]:rounded [&_code]:bg-black/10 [&_code]:px-1 [&_code]:rounded [&_h1]:text-lg [&_h1]:font-bold [&_h2]:text-base [&_h2]:font-semibold [&_h3]:font-medium [&_a]:text-primary [&_a]:underline [&_table]:w-full [&_table]:my-3 [&_table]:border-collapse [&_table]:text-sm [&_thead]:bg-muted/50 [&_th]:border [&_th]:border-border [&_th]:px-3 [&_th]:py-2 [&_th]:text-left [&_th]:font-semibold [&_td]:border [&_td]:border-border [&_td]:px-3 [&_td]:py-2 [&_tr:nth-child(even)]:bg-muted/30"
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
@@ -202,9 +242,6 @@ export function SpeechTester() {
     useState<RecordingStatus>("idle");
   const [recordingSeconds, setRecordingSeconds] = useState(0);
   const [transcript, setTranscript] = useState("");
-  const [transcriptSegments, setTranscriptSegments] = useState<
-    Array<{ text: string; language: string | null }>
-  >([]);
 
   // Streaming/chat state
   const [streamingText, setStreamingText] = useState("");
@@ -213,6 +250,10 @@ export function SpeechTester() {
   const [autoSendCountdown, setAutoSendCountdown] = useState<number | null>(
     null
   );
+
+  // Transcription provider state
+  const [transcriptionProvider, setTranscriptionProvider] =
+    useState<TranscriptionProviderType>("azure");
 
   // Audio recording refs
   const audioCtxRef = useRef<AudioContext | null>(null);
@@ -369,13 +410,11 @@ export function SpeechTester() {
 
   // Send recorded audio to server for transcription
   const transcribeAudio =
-    useCallback(async (): Promise<TranscriptionResult> => {
+    useCallback(async (): Promise<TranscriptionResponse> => {
       const chunks = audioChunksRef.current;
       if (chunks.length === 0) {
         return {
-          success: false,
           text: "",
-          segments: [],
           error: "No audio recorded",
         };
       }
@@ -397,7 +436,7 @@ export function SpeechTester() {
           .slice(0, 2)
           .join("/") || "";
 
-      const url = `${window.location.origin}${basePath}/api/speech/transcribe?sampleRate=${SAMPLE_RATE}`;
+      const url = `${window.location.origin}${basePath}/api/speech/transcribe?sampleRate=${SAMPLE_RATE}&provider=${transcriptionProvider}`;
 
       try {
         const response = await fetch(url, {
@@ -408,17 +447,15 @@ export function SpeechTester() {
           body: combinedBuffer.buffer,
         });
 
-        const result: TranscriptionResult = await response.json();
+        const result: TranscriptionResponse = await response.json();
         return result;
       } catch (err) {
         return {
-          success: false,
           text: "",
-          segments: [],
           error: err instanceof Error ? err.message : "Network error",
         };
       }
-    }, []);
+    }, [transcriptionProvider]);
 
   // Stop recording and transcribe
   const stopRecording = useCallback(async () => {
@@ -430,9 +467,8 @@ export function SpeechTester() {
     // Transcribe the recorded audio
     const result = await transcribeAudio();
 
-    if (result.success && result.text) {
+    if (result.text) {
       setTranscript(result.text);
-      setTranscriptSegments(result.segments);
     } else if (result.error) {
       console.error("Transcription error:", result.error);
     }
@@ -448,7 +484,6 @@ export function SpeechTester() {
     if (recordingStatus !== "idle") return;
 
     setTranscript("");
-    setTranscriptSegments([]);
     audioChunksRef.current = [];
     setRecordingSeconds(0);
 
@@ -705,7 +740,6 @@ export function SpeechTester() {
     setRecordingStatus("idle");
     setRecordingSeconds(0);
     setTranscript("");
-    setTranscriptSegments([]);
     setStreamingText("");
     streamingTextRef.current = "";
     setStreamStatus("idle");
@@ -900,6 +934,37 @@ export function SpeechTester() {
             Input Settings
           </h2>
 
+          <div className="space-y-1.5">
+            <Label>Transcription Provider</Label>
+            <Select
+              value={transcriptionProvider}
+              onValueChange={(v) =>
+                setTranscriptionProvider(v as TranscriptionProviderType)
+              }
+              disabled={recordingStatus !== "idle"}
+            >
+              <SelectTrigger className="w-full">
+                <SelectValue placeholder="Select Provider" />
+              </SelectTrigger>
+              <SelectContent>
+                {TRANSCRIPTION_PROVIDERS.map((provider) => (
+                  <SelectItem key={provider.id} value={provider.id}>
+                    <div className="flex flex-col">
+                      <span>{provider.name}</span>
+                    </div>
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            {/* <p className="text-xs text-muted-foreground">
+              {
+                TRANSCRIPTION_PROVIDERS.find(
+                  (p) => p.id === transcriptionProvider
+                )?.description
+              }
+            </p> */}
+          </div>
+
           {/* <label className="flex items-center gap-3 cursor-pointer group">
             <div className="relative">
               <input
@@ -1063,31 +1128,10 @@ export function SpeechTester() {
         {transcript && (
           <div className="px-4 py-2 border-t bg-muted/30">
             <div className="flex items-center justify-between gap-4">
-              <div className="flex-1 flex flex-wrap items-center gap-1">
-                {transcriptSegments.map((segment, idx) => (
-                  <span key={idx} className="inline-flex items-center gap-1">
-                    {segment.language && (
-                      <span
-                        className={`text-[10px] px-1.5 py-0.5 rounded-full font-medium ${
-                          segment.language === "pt-BR"
-                            ? "bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400"
-                            : segment.language === "en-US"
-                            ? "bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400"
-                            : "bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-400"
-                        }`}
-                      >
-                        {segment.language === "pt-BR"
-                          ? "🇧🇷"
-                          : segment.language === "en-US"
-                          ? "🇺🇸"
-                          : segment.language}
-                      </span>
-                    )}
-                    <span className="text-sm text-muted-foreground">
-                      {segment.text}
-                    </span>
-                  </span>
-                ))}
+              <div className="flex-1">
+                <span className="text-sm text-muted-foreground">
+                  {transcript}
+                </span>
               </div>
               {handsOffMode && autoSendCountdown !== null && (
                 <div className="flex items-center gap-2 text-primary">
