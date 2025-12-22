@@ -167,6 +167,14 @@ export const conversationsRouter = trpc.router({
             conversationId
           );
 
+          const evaluationContext = {
+            cefr_classification: cefrLessonClassification,
+            lesson_plan: lessonPlan,
+            script: script,
+            grammar: cleanedGrammar,
+            vocab: cleanedVocab,
+          };
+          console.log("evaluationContext", JSON.stringify(evaluationContext));
           console.log("getting user evaluation");
           const userEvaluationResponse = await openai.responses.parse({
             text: {
@@ -178,13 +186,7 @@ export const conversationsRouter = trpc.router({
             prompt: {
               id: LEARNER_EVALUATION_PROMPT_ID,
               variables: {
-                evaluation_context: JSON.stringify({
-                  cefr_classification: cefrLessonClassification,
-                  lesson_plan: lessonPlan,
-                  script: script,
-                  grammar: cleanedGrammar,
-                  vocab: cleanedVocab,
-                }),
+                evaluation_context: JSON.stringify(evaluationContext),
               },
             },
           });
@@ -247,7 +249,6 @@ export const conversationsRouter = trpc.router({
         await cefrLessonClassificationPromise;
 
         yield { type: "status" as const, status: "evaluation_complete" };
-
       } catch (error) {
         console.error("Stream error:", error);
         console.error("Error details:", JSON.stringify(error, null, 2));

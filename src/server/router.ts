@@ -19,6 +19,7 @@ import { notionClient } from "./clients/notion-client";
 import { makeClient } from "./clients/make-client";
 import { s3Manager } from "./clients/s3-client";
 import { evaluationsRouter } from "./routers/evaluations";
+import { lessonsRouter } from "./routers/lessons";
 
 /**
  * The main tRPC router combining all sub-routers.
@@ -30,6 +31,7 @@ export const appRouter = trpc.router({
   googleSheets: googleSheetsRouter,
   test: testRouter,
   evaluations: evaluationsRouter,
+  lessons: lessonsRouter,
 });
 
 /**

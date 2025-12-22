@@ -1,0 +1,61 @@
+{
+  "chapterComprehension": "partial",
+  "cefrProgressCheck": {
+    "status": "ok",
+    "requirementsMet": [
+      {
+        "requirement": "Use the present tense of querer, dormir, levantar and ir to express simple desires and routines (e.g., \"Eu quero dormir\", \"Você vai para escola\").",
+        "met": true,
+        "evidence": "Learner produced multiple first-person sentences: 'Eu quero dormir.' and attempted 'Eu quero levantar.'; correctly recognized 'Vai para escola!'"
+      },
+      {
+        "requirement": "Recognize and produce the affirmative imperative form as used in the chapter (\"vai\"), including emphatic repetition for encouragement (\"vai, vai, vai\").",
+        "met": true,
+        "evidence": "Learner identified 'vai' as 'go' (answered the multiple-choice), wrote 'Vai.' when prompted and responded to examples involving 'vai'."
+      },
+      {
+        "requirement": "Use the expression \"mais um pouco\" to request a short extension of time and combine it with verbs (e.g., \"Quero dormir mais um pouco\").",
+        "met": true,
+        "evidence": "Learner wrote the complete target sentence 'Eu quero dormir mais um pouco.' and also produced 'Mais um pouco.'"
+      },
+      {
+        "requirement": "Comprehend and form simple yes/no questions with \"você\" and give short answers (e.g., \"Você quer?\" → \"Sim, eu quero / Não, eu não quero\").",
+        "met": false,
+        "evidence": "No learner-produced examples of forming 'Você ...?' yes/no questions or short answers were provided during the interaction."
+      },
+      {
+        "requirement": "Understand basic morning- and school-related vocabulary from the chapter: dormir, levantar, escola, mamãe, filho.",
+        "met": true,
+        "evidence": "Learner used and recognized 'dormir' and 'levantar' and understood 'Vai para escola'; no explicit usage of 'mamãe' or 'filho' but core verbs/school vocabulary are demonstrated."
+      },
+      {
+        "requirement": "Recognize simple nationality/adjective usage in context (\"o alemão\") and form a short descriptive sentence about someone's origin (e.g., \"Axel é alemão\").",
+        "met": false,
+        "evidence": "No learner output relating to nationality/adjective sentences (e.g., 'Axel é alemão') was produced."
+      }
+    ],
+    "goalsInProgress": [
+      {
+        "goal": "Role-play a morning routine (parent and child) using present-tense verbs, affirmative commands and \"mais um pouco\" to negotiate staying in bed or getting up.",
+        "status": "in_progress",
+        "score": 75,
+        "evidence": "Learner used target phrases ('Eu quero dormir', 'mais um pouco', 'vai') and responded appropriately to prompts, but did not perform a full role-play or produce multi-person dialogue.",
+        "lastUpdatedStep": 3
+      }
+    ],
+    "goalsCompleted": [
+      {
+        "goal": "Practice the full present-tense conjugation of querer and ir for all persons and use them in simple sentences.",
+        "status": "completed",
+        "progress": 80,
+        "evidence": "Learner repeatedly produced correct first-person present-tense examples ('Eu quero dormir', 'Eu quero levantar') and recognized 'vai' in context; broader full-person conjugation evidence is limited but core present-tense use in context is demonstrated.",
+        "completedAtStep": 3
+      }
+    ],
+    "overallAlignment": { "relativeToCefr": "at", "confidence": 0.68 },
+    "alerts": [
+      "Practice forming and answering simple 'você' yes/no questions (e.g., 'Você quer dormir?', 'Sim, eu quero.') — learner provided no examples.",
+      "Add a short exercise to produce a sentence about nationality (e.g., 'Axel é alemão') — no evidence of this skill in the interaction."
+    ]
+  }
+}

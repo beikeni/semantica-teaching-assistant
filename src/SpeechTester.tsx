@@ -8,6 +8,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { skipToken, useMutation, useQuery } from "@tanstack/react-query";
 import {
   Loader2,
@@ -23,6 +24,8 @@ import {
   AlertTriangle,
   Target,
   TrendingUp,
+  BookOpen,
+  GraduationCap,
 } from "lucide-react";
 import { useEffect, useMemo, useRef, useState, useCallback } from "react";
 import { marked } from "marked";
@@ -257,6 +260,22 @@ export function SpeechTester() {
     )
   );
 
+  const lessonCefrLevelQuery = useQuery(
+    trpc.lessons.getLessonCefrLevel.queryOptions(
+      {
+        level: store.level,
+        story: store.story,
+        section: store.section,
+        chapter: store.chapter,
+      },
+      {
+        enabled:
+          !!store.level && !!store.story && !!store.section && !!store.chapter,
+      }
+    )
+  );
+  console.log("lessonCefrLevelQuery", lessonCefrLevelQuery.data);
+
   const chapterTextQuery = useQuery(
     trpc.s3.getChapterText.queryOptions(
       store.level && store.story && store.section && store.chapter
@@ -279,6 +298,19 @@ export function SpeechTester() {
       {
         enabled: !!store.learnerId && !!store.conversationId,
       }
+    )
+  );
+
+  const lessonPlanQuery = useQuery(
+    trpc.notion.getLessonPlan.queryOptions(
+      store.level && store.story && store.section && store.chapter
+        ? {
+            level: store.level,
+            story: store.story,
+            section: store.section,
+            chapter: store.chapter,
+          }
+        : skipToken
     )
   );
 
@@ -1312,258 +1344,353 @@ export function SpeechTester() {
                 <X className="w-4 h-4" />
               </Button>
             </div>
-            <div className="p-4 overflow-y-auto flex-1 space-y-6">
-              {evaluationQuery.isLoading ? (
-                <div className="flex items-center justify-center py-8">
-                  <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-                </div>
-              ) : evaluationQuery.error ? (
-                <p className="text-destructive">
-                  Error loading evaluation: {evaluationQuery.error.message}
-                </p>
-              ) : evaluationQuery.data ? (
-                <>
-                  {/* Chapter Comprehension */}
-                  <div className="bg-muted/50 rounded-lg p-4">
-                    <div className="flex items-center justify-between">
-                      <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
-                        Chapter Comprehension
-                      </h4>
-                      <span
-                        className={`px-3 py-1 rounded-full text-sm font-medium ${
-                          evaluationQuery.data.chapterComprehension ===
-                          "complete"
-                            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                            : evaluationQuery.data.chapterComprehension ===
-                              "partial"
-                            ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
-                            : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-                        }`}
-                      >
-                        {evaluationQuery.data.chapterComprehension ===
-                        "complete"
-                          ? "✓ Complete"
-                          : evaluationQuery.data.chapterComprehension ===
-                            "partial"
-                          ? "◐ Partial"
-                          : "○ None"}
-                      </span>
-                    </div>
-                  </div>
 
-                  {/* CEFR Progress Status */}
-                  <div className="bg-muted/50 rounded-lg p-4">
-                    <div className="flex items-center gap-2 mb-3">
-                      <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide">
-                        CEFR Progress Status
-                      </h4>
-                      <span
-                        className={`px-2 py-0.5 rounded text-xs font-medium ${
-                          evaluationQuery.data.cefrProgressCheck.status === "ok"
-                            ? "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400"
-                            : evaluationQuery.data.cefrProgressCheck.status ===
-                              "warning"
-                            ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400"
-                            : "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400"
-                        }`}
-                      >
-                        {evaluationQuery.data.cefrProgressCheck.status.toUpperCase()}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-4 text-sm">
-                      <div>
-                        <span className="text-muted-foreground">
-                          Alignment:{" "}
-                        </span>
-                        <span className="font-medium capitalize">
-                          {
-                            evaluationQuery.data.cefrProgressCheck
-                              .overallAlignment.relativeToCefr
-                          }{" "}
-                          CEFR level
-                        </span>
+            <Tabs
+              defaultValue="cefr"
+              className="flex-1 flex flex-col overflow-hidden"
+            >
+              <TabsList className="mx-4 mt-4 w-fit">
+                <TabsTrigger value="cefr" className="gap-2">
+                  <GraduationCap className="w-4 h-4" />
+                  CEFR Evaluation
+                </TabsTrigger>
+                <TabsTrigger value="lesson-plan" className="gap-2">
+                  <BookOpen className="w-4 h-4" />
+                  Lesson Plan
+                </TabsTrigger>
+              </TabsList>
+
+              {/* CEFR Evaluation Tab */}
+              <TabsContent
+                value="cefr"
+                className="flex-1 overflow-y-auto p-4 space-y-6"
+              >
+                {evaluationQuery.isLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : evaluationQuery.error ? (
+                  <p className="text-destructive">
+                    Error loading evaluation: {evaluationQuery.error.message}
+                  </p>
+                ) : evaluationQuery.data ? (
+                  <>
+                    {/* Progress Overview Panel */}
+                    <div className="bg-muted/50 rounded-lg p-4">
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                        {/* CEFR Level */}
+                        <div className="flex flex-col">
+                          <span className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                            CEFR Level
+                          </span>
+                          <span className="text-xl font-bold text-primary">
+                            {lessonCefrLevelQuery.data
+                              ? String(lessonCefrLevelQuery.data)
+                              : "—"}
+                          </span>
+                        </div>
+
+                        {/* Comprehension */}
+                        <div className="flex flex-col">
+                          <span className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                            Comprehension
+                          </span>
+                          <span
+                            className={`text-sm font-semibold ${
+                              evaluationQuery.data.chapterComprehension ===
+                              "complete"
+                                ? "text-green-600 dark:text-green-400"
+                                : evaluationQuery.data.chapterComprehension ===
+                                  "partial"
+                                ? "text-yellow-600 dark:text-yellow-400"
+                                : "text-red-600 dark:text-red-400"
+                            }`}
+                          >
+                            {evaluationQuery.data.chapterComprehension ===
+                            "complete"
+                              ? "Complete"
+                              : evaluationQuery.data.chapterComprehension ===
+                                "partial"
+                              ? "Partial"
+                              : "None"}
+                          </span>
+                        </div>
+
+                        {/* Student Alignment */}
+                        <div className="flex flex-col">
+                          <span className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                            Alignment
+                          </span>
+                          <span
+                            className={`text-sm font-semibold ${
+                              evaluationQuery.data.cefrProgressCheck
+                                .overallAlignment.relativeToCefr === "at"
+                                ? "text-green-600 dark:text-green-400"
+                                : evaluationQuery.data.cefrProgressCheck
+                                    .overallAlignment.relativeToCefr === "above"
+                                ? "text-blue-600 dark:text-blue-400"
+                                : "text-yellow-600 dark:text-yellow-400"
+                            }`}
+                          >
+                            {evaluationQuery.data.cefrProgressCheck
+                              .overallAlignment.relativeToCefr === "at"
+                              ? "At CEFR level"
+                              : evaluationQuery.data.cefrProgressCheck
+                                  .overallAlignment.relativeToCefr === "above"
+                              ? "Above CEFR level"
+                              : "Below CEFR level"}
+                          </span>
+                        </div>
+
+                        {/* Status */}
+                        <div className="flex flex-col">
+                          <span className="text-xs text-muted-foreground uppercase tracking-wide mb-1">
+                            Status
+                          </span>
+                          <span
+                            className={`text-sm font-semibold ${
+                              evaluationQuery.data.cefrProgressCheck.status ===
+                              "ok"
+                                ? "text-green-600 dark:text-green-400"
+                                : evaluationQuery.data.cefrProgressCheck
+                                    .status === "warning"
+                                ? "text-yellow-600 dark:text-yellow-400"
+                                : "text-red-600 dark:text-red-400"
+                            }`}
+                          >
+                            {evaluationQuery.data.cefrProgressCheck.status ===
+                            "ok"
+                              ? "OK"
+                              : evaluationQuery.data.cefrProgressCheck
+                                  .status === "warning"
+                              ? "Warning"
+                              : "Error"}
+                          </span>
+                        </div>
                       </div>
-                      <div>
-                        <span className="text-muted-foreground">
-                          Confidence:{" "}
-                        </span>
-                        <span className="font-medium">
-                          {Math.round(
-                            evaluationQuery.data.cefrProgressCheck
-                              .overallAlignment.confidence * 100
+                    </div>
+
+                    {/* Alerts */}
+                    {evaluationQuery.data.cefrProgressCheck.alerts.length >
+                      0 && (
+                      <div className="space-y-2">
+                        <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
+                          <AlertTriangle className="w-4 h-4 text-yellow-500" />
+                          Alerts
+                        </h4>
+                        <div className="space-y-2">
+                          {evaluationQuery.data.cefrProgressCheck.alerts.map(
+                            (alert, idx) => (
+                              <div
+                                key={idx}
+                                className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 text-sm text-yellow-800 dark:text-yellow-200"
+                              >
+                                {alert}
+                              </div>
+                            )
                           )}
-                          %
-                        </span>
+                        </div>
                       </div>
-                    </div>
-                  </div>
+                    )}
 
-                  {/* Alerts */}
-                  {evaluationQuery.data.cefrProgressCheck.alerts.length > 0 && (
-                    <div className="space-y-2">
+                    {/* Requirements - Grey when not met, Green when met */}
+                    <div className="space-y-3">
                       <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
-                        <AlertTriangle className="w-4 h-4 text-yellow-500" />
-                        Alerts
+                        <Target className="w-4 h-4" />
+                        CEFR Requirements
                       </h4>
                       <div className="space-y-2">
-                        {evaluationQuery.data.cefrProgressCheck.alerts.map(
-                          (alert, idx) => (
+                        {evaluationQuery.data.cefrProgressCheck.requirements.map(
+                          (req, idx) => (
                             <div
                               key={idx}
-                              className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-3 text-sm text-yellow-800 dark:text-yellow-200"
+                              className={`rounded-lg p-3 border transition-colors ${
+                                req.met
+                                  ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
+                                  : "bg-muted/30 border-muted-foreground/20"
+                              }`}
                             >
-                              {alert}
+                              <div className="flex items-start gap-2">
+                                {req.met ? (
+                                  <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+                                ) : (
+                                  <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30 shrink-0 mt-0.5" />
+                                )}
+                                <div className="flex-1 min-w-0">
+                                  <p
+                                    className={`font-medium text-sm ${
+                                      !req.met ? "text-muted-foreground" : ""
+                                    }`}
+                                  >
+                                    {req.requirement}
+                                  </p>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    {req.evidence}
+                                  </p>
+                                </div>
+                              </div>
                             </div>
                           )
                         )}
                       </div>
                     </div>
-                  )}
 
-                  {/* Requirements Met */}
-                  <div className="space-y-3">
-                    <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
-                      <Target className="w-4 h-4" />
-                      Requirements Assessment
-                    </h4>
-                    <div className="space-y-2">
-                      {evaluationQuery.data.cefrProgressCheck.requirementsMet.map(
-                        (req, idx) => (
-                          <div
-                            key={idx}
-                            className={`rounded-lg p-3 border ${
-                              req.met
-                                ? "bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800"
-                                : "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800"
-                            }`}
-                          >
-                            <div className="flex items-start gap-2">
-                              {req.met ? (
-                                <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
-                              ) : (
-                                <XCircle className="w-5 h-5 text-red-600 dark:text-red-400 shrink-0 mt-0.5" />
-                              )}
-                              <div className="flex-1 min-w-0">
-                                <p className="font-medium text-sm">
-                                  {req.requirement}
-                                </p>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  {req.evidence}
-                                </p>
-                              </div>
-                            </div>
-                          </div>
-                        )
-                      )}
-                    </div>
-                  </div>
-
-                  {/* Goals In Progress */}
-                  {evaluationQuery.data.cefrProgressCheck.goalsInProgress
-                    .length > 0 && (
+                    {/* Goals Section - Combined view with all goal states */}
                     <div className="space-y-3">
                       <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
                         <TrendingUp className="w-4 h-4" />
-                        Goals In Progress
+                        CEFR Goals
                       </h4>
                       <div className="space-y-3">
-                        {evaluationQuery.data.cefrProgressCheck.goalsInProgress.map(
-                          (goal, idx) => (
-                            <div
-                              key={idx}
-                              className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4"
-                            >
-                              <div className="flex items-start justify-between gap-4 mb-2">
-                                <p className="font-medium text-sm flex-1">
-                                  {goal.goal}
-                                </p>
-                                <span className="text-xs px-2 py-1 rounded-full bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 font-medium whitespace-nowrap">
-                                  Step {goal.lastUpdatedStep}
-                                </span>
-                              </div>
-                              <div className="mb-2">
-                                <div className="flex items-center justify-between text-xs mb-1">
-                                  <span className="text-muted-foreground">
-                                    Progress
-                                  </span>
-                                  <span className="font-medium">
-                                    {goal.score}%
-                                  </span>
+                        {evaluationQuery.data.cefrProgressCheck.goals.map(
+                          (goal, idx) => {
+                            // Completed Goals - Green
+                            if (goal.status === "completed") {
+                              return (
+                                <div
+                                  key={idx}
+                                  className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4"
+                                >
+                                  <div className="flex items-start gap-3">
+                                    <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-center justify-between gap-2 mb-2">
+                                        <p className="font-medium text-sm text-green-800 dark:text-green-200">
+                                          {goal.goal}
+                                        </p>
+                                        <span className="text-xs px-2 py-1 rounded-full bg-green-100 dark:bg-green-800 text-green-800 dark:text-green-200 font-medium whitespace-nowrap">
+                                          ✓ Complete
+                                        </span>
+                                      </div>
+                                      {/* Progress bar at 100% for completed goals */}
+                                      <div className="mb-2">
+                                        <div className="w-full bg-green-200 dark:bg-green-900 rounded-full h-2">
+                                          <div
+                                            className="bg-green-600 dark:bg-green-400 h-2 rounded-full"
+                                            style={{ width: "100%" }}
+                                          />
+                                        </div>
+                                      </div>
+                                      {goal.evidence && (
+                                        <p className="text-xs text-green-700 dark:text-green-300">
+                                          {goal.evidence}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
                                 </div>
-                                <div className="w-full bg-blue-200 dark:bg-blue-900 rounded-full h-2">
-                                  <div
-                                    className="bg-blue-600 dark:bg-blue-400 h-2 rounded-full transition-all"
-                                    style={{ width: `${goal.score}%` }}
-                                  />
-                                </div>
-                              </div>
-                              <p className="text-xs text-muted-foreground">
-                                {goal.evidence}
-                              </p>
-                            </div>
-                          )
-                        )}
-                      </div>
-                    </div>
-                  )}
+                              );
+                            }
 
-                  {/* Completed Goals */}
-                  {evaluationQuery.data.cefrProgressCheck.goalsCompleted
-                    .length > 0 && (
-                    <div className="space-y-3">
-                      <h4 className="font-medium text-sm text-muted-foreground uppercase tracking-wide flex items-center gap-2">
-                        <CheckCircle2 className="w-4 h-4 text-green-500" />
-                        Completed Goals
-                      </h4>
-                      <div className="space-y-2">
-                        {evaluationQuery.data.cefrProgressCheck.goalsCompleted.map(
-                          (goal, idx) => (
-                            <div
-                              key={idx}
-                              className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-3"
-                            >
-                              <div className="flex items-start gap-2">
-                                <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 shrink-0 mt-0.5" />
-                                <div className="flex-1 min-w-0">
-                                  <div className="flex items-center justify-between gap-2">
-                                    <p className="font-medium text-sm">
+                            // In Progress Goals - Blue with progress bar
+                            if (goal.status === "in_progress") {
+                              return (
+                                <div
+                                  key={idx}
+                                  className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4"
+                                >
+                                  <div className="flex items-start gap-3">
+                                    <div className="w-5 h-5 rounded-full border-2 border-blue-500 border-t-transparent animate-spin shrink-0 mt-0.5" />
+                                    <div className="flex-1 min-w-0">
+                                      <div className="flex items-start justify-between gap-4 mb-2">
+                                        <p className="font-medium text-sm text-blue-800 dark:text-blue-200">
+                                          {goal.goal}
+                                        </p>
+                                        <span className="text-xs px-2 py-1 rounded-full bg-blue-100 dark:bg-blue-800 text-blue-800 dark:text-blue-200 font-medium whitespace-nowrap">
+                                          In Progress
+                                        </span>
+                                      </div>
+                                      <div className="mb-2">
+                                        <div className="flex items-center justify-between text-xs mb-1">
+                                          <span className="text-blue-600 dark:text-blue-300">
+                                            Progress
+                                          </span>
+                                          <span className="font-medium text-blue-700 dark:text-blue-200">
+                                            {goal.progress ?? 0}%
+                                          </span>
+                                        </div>
+                                        <div className="w-full bg-blue-200 dark:bg-blue-900 rounded-full h-2">
+                                          <div
+                                            className="bg-blue-600 dark:bg-blue-400 h-2 rounded-full transition-all"
+                                            style={{
+                                              width: `${goal.progress ?? 0}%`,
+                                            }}
+                                          />
+                                        </div>
+                                      </div>
+                                      {goal.evidence && (
+                                        <p className="text-xs text-blue-600 dark:text-blue-300">
+                                          {goal.evidence}
+                                        </p>
+                                      )}
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            }
+
+                            // Not Started Goals - Grey
+                            return (
+                              <div
+                                key={idx}
+                                className="bg-muted/30 border border-muted-foreground/20 rounded-lg p-4"
+                              >
+                                <div className="flex items-start gap-3">
+                                  <div className="w-5 h-5 rounded-full border-2 border-muted-foreground/30 shrink-0 mt-0.5" />
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-sm text-muted-foreground">
                                       {goal.goal}
                                     </p>
-                                    {goal.progress !== null && (
-                                      <span className="text-xs font-medium text-green-700 dark:text-green-300">
-                                        {goal.progress}%
-                                      </span>
-                                    )}
                                   </div>
-                                  {goal.evidence && (
-                                    <p className="text-xs text-muted-foreground mt-1">
-                                      {goal.evidence}
-                                    </p>
-                                  )}
-                                  {goal.completedAtStep !== null && (
-                                    <p className="text-xs text-green-600 dark:text-green-400 mt-1">
-                                      Completed at step {goal.completedAtStep}
-                                    </p>
-                                  )}
                                 </div>
                               </div>
-                            </div>
-                          )
+                            );
+                          }
                         )}
                       </div>
                     </div>
-                  )}
-                </>
-              ) : (
-                <div className="text-center py-8 text-muted-foreground">
-                  <ClipboardCheck className="w-12 h-12 mx-auto mb-3 opacity-50" />
-                  <p>No evaluation data available yet.</p>
-                  <p className="text-sm mt-1">
-                    Complete some lesson activities to see your progress.
+                  </>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <ClipboardCheck className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>No evaluation data available yet.</p>
+                    <p className="text-sm mt-1">
+                      Complete some lesson activities to see your progress.
+                    </p>
+                  </div>
+                )}
+              </TabsContent>
+
+              {/* Lesson Plan Tab */}
+              <TabsContent
+                value="lesson-plan"
+                className="flex-1 overflow-y-auto p-4"
+              >
+                {lessonPlanQuery.isLoading ? (
+                  <div className="flex items-center justify-center py-8">
+                    <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
+                  </div>
+                ) : lessonPlanQuery.error ? (
+                  <p className="text-destructive">
+                    Error loading lesson plan: {lessonPlanQuery.error.message}
                   </p>
-                </div>
-              )}
-            </div>
+                ) : lessonPlanQuery.data ? (
+                  <div className="prose prose-sm dark:prose-invert max-w-none">
+                    <Markdown content={lessonPlanQuery.data} />
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-muted-foreground">
+                    <BookOpen className="w-12 h-12 mx-auto mb-3 opacity-50" />
+                    <p>No lesson plan available yet.</p>
+                    <p className="text-sm mt-1">
+                      Select a chapter and start the lesson to generate a lesson
+                      plan.
+                    </p>
+                  </div>
+                )}
+              </TabsContent>
+            </Tabs>
+
             <div className="p-4 border-t flex justify-end">
               <Button
                 variant="outline"

@@ -1,0 +1,68 @@
+{
+  "chapterComprehension": "partial",
+  "cefrProgressCheck": {
+    "status": "warning",
+    "requirementsMet": [
+      {
+        "requirement": "Use the present tense of querer, dormir, levantar and ir to express simple desires and routines (e.g., \"Eu quero dormir\", \"Você vai para escola\").",
+        "met": false,
+        "evidence": "Learner produced single-word verbs 'dormir' and 'levantar' but did not produce any full present-tense sentences or conjugations (e.g., no 'Eu quero dormir' or 'Você vai...')."
+      },
+      {
+        "requirement": "Recognize and produce the affirmative imperative form as used in the chapter (\"vai\"), including emphatic repetition for encouragement (\"vai, vai, vai\").",
+        "met": false,
+        "evidence": "No evidence: learner did not produce or respond to imperative forms such as 'vai'."
+      },
+      {
+        "requirement": "Use the expression \"mais um pouco\" to request a short extension of time and combine it with verbs (e.g., \"Quero dormir mais um pouco\").",
+        "met": false,
+        "evidence": "No evidence of 'mais um pouco' in learner output."
+      },
+      {
+        "requirement": "Comprehend and form simple yes/no questions with \"você\" and give short answers (e.g., \"Você quer?\" → \"Sim, eu quero / Não, eu não quero\").",
+        "met": false,
+        "evidence": "No yes/no question formation or short answers recorded."
+      },
+      {
+        "requirement": "Understand basic morning- and school-related vocabulary from the chapter: dormir, levantar, escola, mamãe, filho.",
+        "met": false,
+        "evidence": "Learner produced and recognized 'dormir' and 'levantar' but has not demonstrated understanding/production of 'escola', 'mamãe' or 'filho'."
+      },
+      {
+        "requirement": "Recognize simple nationality/adjective usage in context (\"o alemão\") and form a short descriptive sentence about someone's origin (e.g., \"Axel é alemão\").",
+        "met": false,
+        "evidence": "No evidence of nationality/adjective production or recognition in learner output."
+      }
+    ],
+    "goalsInProgress": [
+      {
+        "goal": "Role-play a morning routine (parent and child) using present-tense verbs, affirmative commands and \"mais um pouco\" to negotiate staying in bed or getting up.",
+        "status": "in_progress",
+        "score": 70,
+        "evidence": "Learner correctly produced the vocabulary items 'dormir' and 'levantar' when prompted, showing basic lexical recognition. No role-play, commands, or 'mais um pouco' production yet.",
+        "lastUpdatedStep": 3
+      },
+      {
+        "goal": "Practice the full present-tense conjugation of querer and ir for all persons and use them in simple sentences.",
+        "status": "in_progress",
+        "score": 70,
+        "evidence": "Learner responded with single-word verbs and answered prompts, indicating comprehension of infinitives, but did not produce conjugated forms or full sentences (no 'Eu quero dormir', no 'eu vou').",
+        "lastUpdatedStep": 3
+      },
+      {
+        "goal": "Learn to form basic negative statements and polite requests related to the same context (e.g., \"Você não vai\", \"Por favor, pode dormir mais um pouco?\").",
+        "status": "in_progress",
+        "score": 60,
+        "evidence": "Learner shows some vocabulary recognition ('dormir', 'levantar') but has not produced negatives or polite-request structures.",
+        "lastUpdatedStep": 3
+      }
+    ],
+    "goalsCompleted": [],
+    "overallAlignment": { "relativeToCefr": "below", "confidence": 0.26 },
+    "alerts": [
+      "Core CEFR requirements (present-tense production for querer/ir, imperative 'vai', 'mais um pouco', and yes/no question/answer formation) are currently unmet. Recommend targeted practice before advancing.",
+      "Suggested remediation: (1) Prompted production drill: have learner say full sentences such as 'Eu quero dormir' and 'Eu vou para a escola' repeatedly; (2) Conjugation exercise for querer and ir (present tense, all persons) with fill-in-the-blank; (3) Short command practice using 'vai' and emphatic 'vai, vai, vai'; (4) Practice 'mais um pouco' with time phrases ('mais cinco minutos', 'mais um pouco') and short role-play parent/child exchanges.",
+      "Related material: short production drills, conjugation worksheets for 'querer' and 'ir', imperative/command flashcards, simple role-play prompts (parent asks, child replies), and example sentences to mimic."
+    ]
+  }
+}

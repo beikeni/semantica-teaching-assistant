@@ -1,26 +1,17 @@
 import { z } from "zod";
 
 // Helper schemas
-const RequirementMetSchema = z.object({
+const RequirementSchema = z.object({
   requirement: z.string(),
   met: z.boolean(),
   evidence: z.string(),
 });
 
-const GoalInProgressSchema = z.object({
+const GoalSchema = z.object({
   goal: z.string(),
-  status: z.literal("in_progress"),
-  score: z.number().min(0).max(100),
-  evidence: z.string(),
-  lastUpdatedStep: z.number().int().positive(),
-});
-
-const GoalCompletedSchema = z.object({
-  goal: z.string(),
-  status: z.literal("completed"),
+  status: z.enum(["not_started", "in_progress", "completed"]),
   progress: z.number().min(0).max(100).nullable(),
   evidence: z.string().nullable(),
-  completedAtStep: z.number().int().positive().nullable(),
 });
 
 const OverallAlignmentSchema = z.object({
@@ -28,18 +19,10 @@ const OverallAlignmentSchema = z.object({
   confidence: z.number().min(0).max(1),
 });
 
-const IngestedSchema = z.object({
-  cefrLevel: z.enum(["A1", "A2", "B1", "B2", "C1", "C2"]),
-  requirements: z.array(z.string()),
-  goals: z.array(z.string()),
-});
-
 const CefrProgressCheckSchema = z.object({
   status: z.enum(["ok", "warning", "error"]),
-//   ingested: IngestedSchema,
-  requirementsMet: z.array(RequirementMetSchema),
-  goalsInProgress: z.array(GoalInProgressSchema),
-  goalsCompleted: z.array(GoalCompletedSchema),
+  requirements: z.array(RequirementSchema),
+  goals: z.array(GoalSchema),
   overallAlignment: OverallAlignmentSchema,
   alerts: z.array(z.string()),
 });
@@ -52,11 +35,9 @@ export const UserEvaluationSchema = z.object({
 // Type inference
 export type UserEvaluation = z.infer<typeof UserEvaluationSchema>;
 export type CEFRProgressCheck = z.infer<typeof CefrProgressCheckSchema>;
-export type RequirementMet = z.infer<typeof RequirementMetSchema>;
-export type GoalInProgress = z.infer<typeof GoalInProgressSchema>;
-export type GoalCompleted = z.infer<typeof GoalCompletedSchema>;
+export type RequirementMet = z.infer<typeof RequirementSchema>;
+export type Goal = z.infer<typeof GoalSchema>;
 export type OverallAlignment = z.infer<typeof OverallAlignmentSchema>;
-export type Ingested = z.infer<typeof IngestedSchema>;
 
 // Example usage
 const exampleData = {
@@ -64,29 +45,35 @@ const exampleData = {
     chapterComprehension: "partial",
     cefrProgressCheck: {
       status: "ok",
-    //   ingested: {
-    //     cefrLevel: "A1",
-    //     requirements: ["Use basic present-tense sentences"],
-    //     goals: ["Say shopping actions in past or present"],
-    //   },
-      requirementsMet: [
+      requirements: [
         {
           requirement: "Use basic present-tense sentences",
           met: true,
           evidence: "Learner produced 'Eu vou ao mercado'.",
         },
       ],
-      goalsInProgress: [
+      goals: [
         {
           goal: "Say shopping actions in past or present",
           status: "in_progress",
           progress: 65,
           evidence:
             "Learner translated 'I went shopping' as 'Eu fui ao mercado' with minor pronunciation errors.",
-          lastUpdatedStep: 1,
+        },
+        {
+          goal: "Say shopping actions in future",
+          status: "completed",
+          progress: 100,
+          evidence:
+            "Learner translated 'I will go shopping' as 'Eu vou ao mercado' with minor pronunciation errors.",
+        },
+        {
+          goal: "Say hello to someone",
+          status: "not_started",
+          progress: 0,
+          evidence: null,
         },
       ],
-      goalsCompleted: [],
       overallAlignment: {
         relativeToCefr: "at",
         confidence: 0.5,
