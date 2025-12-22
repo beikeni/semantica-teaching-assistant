@@ -505,10 +505,11 @@ export async function handleTranscribeRequest(req: Request): Promise<Response> {
   try {
     // Get sample rate from query params (default 48000)
     const url = new URL(req.url);
-    const sampleRate = parseInt(
-      url.searchParams.get("sampleRate") ?? "48000",
-      10
-    );
+    const sampleRate = 16000;
+    // const sampleRate = parseInt(
+    //   url.searchParams.get("sampleRate") ?? "48000",
+    //   10
+    // );
 
     // Get audio data from request body
     const audioBuffer = await req.arrayBuffer();
