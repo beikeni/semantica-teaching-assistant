@@ -7,6 +7,6 @@ export function App() {
       <SpeechTester />
     </div>
   );
-}
+} 
 
 export default App;
